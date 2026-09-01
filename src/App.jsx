@@ -21,6 +21,7 @@ const S = {
   message: { padding: 12, borderRadius: 10, marginBottom: 15 }
 };
 
+const ZONES = ["Metropolitana", "Suroccidente", "Suroriente", "Riomar", "Centro Histórico"];
 const emptyLeader = { nombre: "", zona: "", telefono: "" };
 const emptyMeeting = {
   tema: "", descripcion: "", fecha: "", lugar: "",
@@ -250,6 +251,33 @@ export default function App() {
     return leaders.filter((leader) => `${leader.nombre || ""} ${leader.zona || ""} ${leader.telefono || ""}`.toLowerCase().includes(text));
   }, [leaders, search]);
 
+  const zonePerformance = useMemo(() => {
+    const rows = ZONES.map((zone) => {
+      const zoneLeaders = leaders.filter((leader) =>
+        (leader.zona || "").trim().toLocaleLowerCase("es") === zone.toLocaleLowerCase("es")
+      );
+      const leaderIds = new Set(zoneLeaders.map((leader) => leader.id));
+      const zoneMeetings = meetings.filter((meeting) =>
+        leaderIds.has(meeting.lider_id) && Number(meeting.fecha.slice(0, 4)) === Number(year)
+      );
+      return {
+        zona: zone,
+        lideres: zoneLeaders.length,
+        reuniones: zoneMeetings.length,
+        convocados: zoneMeetings.reduce((sum, meeting) => sum + Number(meeting.personas_convocadas || 0), 0),
+        asistentes: zoneMeetings.reduce((sum, meeting) => sum + Number(meeting.personas_asistentes || 0), 0)
+      };
+    });
+    const totalAsistentes = rows.reduce((sum, row) => sum + row.asistentes, 0);
+    return rows.map((row) => ({
+      ...row,
+      asistencia: row.convocados ? Math.round((row.asistentes / row.convocados) * 100) : 0,
+      participacion: totalAsistentes ? Math.round((row.asistentes / totalAsistentes) * 100) : 0
+    })).sort((a, b) => b.asistentes - a.asistentes);
+  }, [leaders, meetings, year]);
+
+  const topZone = zonePerformance[0];
+
   function meetingsForLeader(id) {
     return meetings.filter((meeting) => meeting.lider_id === id && Number(meeting.fecha.slice(0, 4)) === Number(year));
   }
@@ -282,6 +310,7 @@ export default function App() {
           <div><h1 style={{ margin: 0 }}>Seguimiento de reuniones</h1><p style={{ color: "#64748b", marginBottom: 0 }}>Líderes, reuniones y evidencias</p></div>
           <div style={S.row}>
             <button style={{ ...S.button, ...S.primary }} onClick={() => setModal("leader")}>+ Agregar líder</button>
+            <button style={{ ...S.button, ...S.secondary }} onClick={() => setModal("performance")}>Rendimiento por zonas</button>
             <button style={{ ...S.button, ...S.secondary }} onClick={signOut}>Cerrar sesión</button>
           </div>
         </div>
@@ -318,7 +347,12 @@ export default function App() {
         <div style={S.modalBg}><form style={S.modal} onSubmit={saveLeader}>
           <h2>Agregar líder</h2>
           <label>Nombre completo *<input required style={S.input} value={leaderForm.nombre} onChange={(e) => setLeaderForm({ ...leaderForm, nombre: e.target.value })} /></label><br /><br />
-          <label>Zona o sector<input style={S.input} value={leaderForm.zona} onChange={(e) => setLeaderForm({ ...leaderForm, zona: e.target.value })} /></label><br /><br />
+          <label>Zona o sector *
+            <select required style={S.input} value={leaderForm.zona} onChange={(e) => setLeaderForm({ ...leaderForm, zona: e.target.value })}>
+              <option value="">Seleccione una zona</option>
+              {ZONES.map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+            </select>
+          </label><br /><br />
           <label>Teléfono<input style={S.input} value={leaderForm.telefono} onChange={(e) => setLeaderForm({ ...leaderForm, telefono: e.target.value })} /></label><br /><br />
           <div style={S.row}><button type="button" style={{ ...S.button, ...S.secondary }} onClick={() => setModal("")}>Cancelar</button><button type="submit" style={{ ...S.button, ...S.primary }} disabled={saving}>{saving ? "Guardando..." : "Guardar líder"}</button></div>
         </form></div>
@@ -365,6 +399,41 @@ export default function App() {
         </div></div>
       )}
 
+      {modal === "performance" && (
+        <div style={S.modalBg}><div style={{ ...S.modal, maxWidth: 1050 }}>
+          <div style={{ ...S.row, justifyContent: "space-between" }}>
+            <div><h2 style={{ marginBottom: 4 }}>Rendimiento por zonas</h2><p style={{ marginTop: 0, color: "#64748b" }}>Participación territorial correspondiente a {year}</p></div>
+            <button style={{ ...S.button, ...S.secondary }} onClick={() => setModal("")}>Cerrar</button>
+          </div>
+          <div style={{ ...S.block, ...S.success, marginBottom: 18 }}>
+            <b>Zona con mayor participación:</b>{" "}
+            {topZone && topZone.asistentes > 0 ? `${topZone.zona}, con ${topZone.asistentes} asistentes y ${topZone.participacion}% del total registrado.` : "Aún no hay reuniones con asistencia registrada en el año seleccionado."}
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+              <thead><tr style={{ background: "#eff6ff", textAlign: "left" }}>
+                {["Zona", "Líderes", "Reuniones", "Convocados", "Asistentes", "Asistencia", "Peso territorial"].map((label) => <th key={label} style={{ padding: 12, borderBottom: "1px solid #cbd5e1" }}>{label}</th>)}
+              </tr></thead>
+              <tbody>{zonePerformance.map((row) => (
+                <tr key={row.zona}>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0", fontWeight: 700 }}>{row.zona}</td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.lideres}</td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.reuniones}</td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.convocados}</td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.asistentes}</td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.asistencia}%</td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0", minWidth: 150 }}>
+                    <b>{row.participacion}%</b>
+                    <div style={{ height: 8, marginTop: 6, background: "#e2e8f0", borderRadius: 8 }}><div style={{ height: 8, width: `${row.participacion}%`, background: "#2563eb", borderRadius: 8 }} /></div>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <p style={{ marginTop: 16, color: "#64748b", fontSize: 13 }}>Peso territorial = asistentes registrados en la zona dividido entre asistentes registrados en las cinco zonas. Este indicador representa participación en reuniones.</p>
+        </div></div>
+      )}
+
       {modal === "evidence" && evidenceMeeting && (
         <div style={S.modalBg}><div style={S.modal}>
           <div style={{ ...S.row, justifyContent: "space-between" }}><h2>Evidencias de la reunión</h2><button style={{ ...S.button, ...S.secondary }} onClick={() => setModal("history")}>Regresar</button></div>
@@ -376,4 +445,3 @@ export default function App() {
     </div>
   );
 }
-
