@@ -1,834 +1,379 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase.js";
 
-const estilos = {
-  pagina: {
-    minHeight: "100vh",
-    background: "#f4f7fb",
-    color: "#172033",
-    fontFamily: "Arial, sans-serif"
-  },
-  encabezado: {
-    background: "#ffffff",
-    borderBottom: "1px solid #dbe2ea",
-    padding: "20px"
-  },
-  contenido: {
-    maxWidth: "1150px",
-    margin: "0 auto",
-    padding: "24px"
-  },
-  fila: {
-    display: "flex",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: "12px"
-  },
-  rejilla: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))",
-    gap: "18px"
-  },
-  tarjeta: {
-    background: "#ffffff",
-    border: "1px solid #dbe2ea",
-    borderRadius: "16px",
-    padding: "20px",
-    boxShadow: "0 6px 18px rgba(15, 23, 42, 0.06)"
-  },
-  campo: {
-    width: "100%",
-    boxSizing: "border-box",
-    marginTop: "6px",
-    padding: "11px",
-    border: "1px solid #b9c4d2",
-    borderRadius: "10px"
-  },
-  boton: {
-    border: "0",
-    borderRadius: "10px",
-    padding: "11px 15px",
-    cursor: "pointer",
-    fontWeight: "bold"
-  },
-  azul: {
-    background: "#2563eb",
-    color: "#ffffff"
-  },
-  blanco: {
-    background: "#ffffff",
-    color: "#172033",
-    border: "1px solid #b9c4d2"
-  },
-  rojo: {
-    background: "#fff1f2",
-    color: "#be123c",
-    border: "1px solid #fecdd3"
-  },
-  verde: {
-    background: "#ecfdf5",
-    color: "#047857"
-  },
-  amarillo: {
-    background: "#fff7ed",
-    color: "#9a3412"
-  },
-  modalFondo: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 20,
-    background: "rgba(15, 23, 42, 0.55)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "16px"
-  },
-  modal: {
-    width: "100%",
-    maxWidth: "800px",
-    maxHeight: "92vh",
-    overflowY: "auto",
-    background: "#ffffff",
-    borderRadius: "18px",
-    padding: "24px"
-  },
-  bloque: {
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: "12px",
-    padding: "14px"
-  },
-  mensaje: {
-    padding: "12px",
-    borderRadius: "10px",
-    marginBottom: "15px"
-  }
+const S = {
+  page: { minHeight: "100vh", background: "#f4f7fb", color: "#172033", fontFamily: "Arial, sans-serif" },
+  header: { background: "#fff", borderBottom: "1px solid #dbe2ea", padding: 20 },
+  content: { maxWidth: 1150, margin: "0 auto", padding: 24 },
+  row: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 18 },
+  card: { background: "#fff", border: "1px solid #dbe2ea", borderRadius: 16, padding: 20, boxShadow: "0 6px 18px rgba(15,23,42,.06)" },
+  input: { width: "100%", boxSizing: "border-box", marginTop: 6, padding: 11, border: "1px solid #b9c4d2", borderRadius: 10 },
+  button: { border: 0, borderRadius: 10, padding: "11px 15px", cursor: "pointer", fontWeight: "bold" },
+  primary: { background: "#2563eb", color: "#fff" },
+  secondary: { background: "#fff", color: "#172033", border: "1px solid #b9c4d2" },
+  danger: { background: "#fff1f2", color: "#be123c", border: "1px solid #fecdd3" },
+  success: { background: "#ecfdf5", color: "#047857" },
+  warning: { background: "#fff7ed", color: "#9a3412" },
+  modalBg: { position: "fixed", inset: 0, zIndex: 20, background: "rgba(15,23,42,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 },
+  modal: { width: "100%", maxWidth: 800, maxHeight: "92vh", overflowY: "auto", background: "#fff", borderRadius: 18, padding: 24 },
+  block: { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 },
+  message: { padding: 12, borderRadius: 10, marginBottom: 15 }
 };
 
-const liderVacio = {
-  nombre: "",
-  zona: "",
-  telefono: ""
+const emptyLeader = { nombre: "", zona: "", telefono: "" };
+const emptyMeeting = {
+  tema: "", descripcion: "", fecha: "", lugar: "",
+  personas_convocadas: "", personas_asistentes: "",
+  entrego_premios: false, observaciones: ""
 };
 
-const reunionVacia = {
-  tema: "",
-  descripcion: "",
-  fecha: "",
-  lugar: "",
-  personas_convocadas: "",
-  personas_asistentes: "",
-  entrego_premios: false,
-  observaciones: ""
-};
-
-function fechaBonita(fecha) {
-  if (!fecha) return "Sin fecha";
-
-  return new Date(fecha + "T00:00:00").toLocaleDateString(
-    "es-CO",
-    {
-      day: "2-digit",
-      month: "long",
-      year: "numeric"
-    }
-  );
+function prettyDate(value) {
+  if (!value) return "Sin fecha";
+  return new Date(value + "T00:00:00").toLocaleDateString("es-CO", {
+    day: "2-digit", month: "long", year: "numeric"
+  });
 }
 
-function nombreSeguro(nombre) {
-  return nombre
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9._-]/g, "_");
+function safeName(value) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
 export default function App() {
-  const [sesion, setSesion] = useState(null);
-  const [correo, setCorreo] = useState("");
-  const [contrasena, setContrasena] = useState("");
-  const [cargando, setCargando] = useState(true);
-  const [guardando, setGuardando] = useState(false);
-  const [mensaje, setMensaje] = useState("");
-  const [tipoMensaje, setTipoMensaje] = useState("verde");
-
-  const [lideres, setLideres] = useState([]);
-  const [reuniones, setReuniones] = useState([]);
-  const [busqueda, setBusqueda] = useState("");
-  const [anio, setAnio] = useState(new Date().getFullYear());
-
+  const [session, setSession] = useState(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [noticeType, setNoticeType] = useState("success");
+  const [leaders, setLeaders] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const [search, setSearch] = useState("");
+  const [year, setYear] = useState(new Date().getFullYear());
   const [modal, setModal] = useState("");
-  const [liderSeleccionado, setLiderSeleccionado] =
-    useState(null);
-
-  const [formLider, setFormLider] =
-    useState(liderVacio);
-
-  const [formReunion, setFormReunion] =
-    useState(reunionVacia);
-
-  const [listaAsistentes, setListaAsistentes] =
-    useState(null);
-
-  const [listaPremiados, setListaPremiados] =
-    useState(null);
-
-  const [fotografias, setFotografias] =
-    useState([]);
+  const [selectedLeader, setSelectedLeader] = useState(null);
+  const [leaderForm, setLeaderForm] = useState(emptyLeader);
+  const [meetingForm, setMeetingForm] = useState(emptyMeeting);
+  const [attendanceFile, setAttendanceFile] = useState(null);
+  const [winnersFile, setWinnersFile] = useState(null);
+  const [photos, setPhotos] = useState([]);
+  const [evidenceMeeting, setEvidenceMeeting] = useState(null);
+  const [evidence, setEvidence] = useState([]);
 
   useEffect(() => {
-    verificarSesion();
-
-    const { data } = supabase.auth.onAuthStateChange(
-      (_evento, nuevaSesion) => {
-        setSesion(nuevaSesion);
-
-        if (nuevaSesion) {
-          cargarDatos();
-        }
-      }
-    );
-
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setSession(data.session);
+      setLoading(false);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
     return () => {
+      mounted = false;
       data.subscription.unsubscribe();
     };
   }, []);
 
-  async function verificarSesion() {
-    const { data } = await supabase.auth.getSession();
-
-    setSesion(data.session);
-
-    if (data.session) {
-      await cargarDatos();
+  useEffect(() => {
+    if (session) loadData();
+    else {
+      setLeaders([]);
+      setMeetings([]);
     }
+  }, [session]);
 
-    setCargando(false);
+  function showNotice(text, type = "success") {
+    setNotice(text);
+    setNoticeType(type);
   }
 
-  function mostrarMensaje(texto, tipo = "verde") {
-    setMensaje(texto);
-    setTipoMensaje(tipo);
+  async function signIn(event) {
+    event.preventDefault();
+    setSaving(true);
+    setNotice("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) showNotice("No fue posible iniciar sesión: " + error.message, "danger");
+    setSaving(false);
   }
 
-  async function iniciarSesion(evento) {
-    evento.preventDefault();
-    setGuardando(true);
-    setMensaje("");
-
-    const { error } =
-      await supabase.auth.signInWithPassword({
-        email: correo,
-        password: contrasena
-      });
-
-    if (error) {
-      mostrarMensaje(
-        "No fue posible iniciar sesión: " +
-          error.message,
-        "rojo"
-      );
-    }
-
-    setGuardando(false);
-  }
-
-  async function cerrarSesion() {
+  async function signOut() {
     await supabase.auth.signOut();
-
-    setSesion(null);
-    setLideres([]);
-    setReuniones([]);
-    setCorreo("");
-    setContrasena("");
+    setEmail("");
+    setPassword("");
   }
 
-  async function cargarDatos() {
-    setCargando(true);
-
-    const resultadoLideres = await supabase
-      .from("lideres")
-      .select("*")
-      .order("nombre", { ascending: true });
-
-    const resultadoReuniones = await supabase
-      .from("reuniones")
-      .select("*")
-      .order("fecha", { ascending: false });
-
-    if (resultadoLideres.error) {
-      mostrarMensaje(
-        "Error consultando líderes: " +
-          resultadoLideres.error.message,
-        "rojo"
-      );
-    } else {
-      setLideres(resultadoLideres.data || []);
-    }
-
-    if (resultadoReuniones.error) {
-      mostrarMensaje(
-        "Error consultando reuniones: " +
-          resultadoReuniones.error.message,
-        "rojo"
-      );
-    } else {
-      setReuniones(resultadoReuniones.data || []);
-    }
-
-    setCargando(false);
+  async function loadData() {
+    setLoading(true);
+    const [leaderResult, meetingResult] = await Promise.all([
+      supabase.from("lideres").select("*").order("nombre", { ascending: true }),
+      supabase.from("reuniones").select("*").order("fecha", { ascending: false })
+    ]);
+    if (leaderResult.error) showNotice("Error consultando líderes: " + leaderResult.error.message, "danger");
+    else setLeaders(leaderResult.data || []);
+    if (meetingResult.error) showNotice("Error consultando reuniones: " + meetingResult.error.message, "danger");
+    else setMeetings(meetingResult.data || []);
+    setLoading(false);
   }
 
-  async function guardarLider(evento) {
-    evento.preventDefault();
-    setGuardando(true);
-    setMensaje("");
-
-    const { error } = await supabase
-      .from("lideres")
-      .insert({
-        nombre: formLider.nombre.trim(),
-        zona: formLider.zona.trim(),
-        telefono: formLider.telefono.trim(),
-        estado: "Activo"
-      });
-
-    if (error) {
-      mostrarMensaje(
-        "No fue posible guardar el líder: " +
-          error.message,
-        "rojo"
-      );
-    } else {
-      mostrarMensaje(
-        "El líder fue registrado correctamente."
-      );
-
-      setFormLider(liderVacio);
+  async function saveLeader(event) {
+    event.preventDefault();
+    setSaving(true);
+    setNotice("");
+    const { error } = await supabase.from("lideres").insert({
+      nombre: leaderForm.nombre.trim(),
+      zona: leaderForm.zona.trim(),
+      telefono: leaderForm.telefono.trim(),
+      estado: "Activo"
+    });
+    if (error) showNotice("No fue posible guardar el líder: " + error.message, "danger");
+    else {
+      setLeaderForm(emptyLeader);
       setModal("");
-      await cargarDatos();
+      showNotice("Líder registrado correctamente.");
+      await loadData();
     }
-
-    setGuardando(false);
+    setSaving(false);
   }
 
-  function abrirFormularioReunion(lider) {
-    setLiderSeleccionado(lider);
-    setFormReunion(reunionVacia);
-    setListaAsistentes(null);
-    setListaPremiados(null);
-    setFotografias([]);
-    setMensaje("");
-    setModal("reunion");
+  function openMeeting(leader) {
+    setSelectedLeader(leader);
+    setMeetingForm(emptyMeeting);
+    setAttendanceFile(null);
+    setWinnersFile(null);
+    setPhotos([]);
+    setNotice("");
+    setModal("meeting");
   }
 
-  async function subirArchivo(
-    archivo,
-    reunionId,
-    tipo
-  ) {
-    if (!archivo) return null;
-
-    const ruta =
-      sesion.user.id +
-      "/" +
-      reunionId +
-      "/" +
-      tipo +
-      "_" +
-      Date.now() +
-      "_" +
-      nombreSeguro(archivo.name);
-
-    const { error: errorCarga } = await supabase
-      .storage
+  async function uploadEvidence(file, meetingId, type) {
+    if (!file) return;
+    const path = `${session.user.id}/${meetingId}/${type}_${Date.now()}_${safeName(file.name)}`;
+    const { error: uploadError } = await supabase.storage
       .from("evidencias-reuniones")
-      .upload(ruta, archivo, {
-        cacheControl: "3600",
-        upsert: false
-      });
-
-    if (errorCarga) {
-      throw new Error(errorCarga.message);
-    }
-
-    const { error: errorRegistro } = await supabase
-      .from("evidencias")
-      .insert({
-        reunion_id: reunionId,
-        tipo,
-        nombre_archivo: archivo.name,
-        ruta_archivo: ruta
-      });
-
-    if (errorRegistro) {
-      throw new Error(errorRegistro.message);
-    }
-
-    return ruta;
+      .upload(path, file, { cacheControl: "3600", upsert: false });
+    if (uploadError) throw uploadError;
+    const { error: recordError } = await supabase.from("evidencias").insert({
+      reunion_id: meetingId,
+      tipo: type,
+      nombre_archivo: file.name,
+      ruta_archivo: path
+    });
+    if (recordError) throw recordError;
   }
 
-  async function guardarReunion(evento) {
-    evento.preventDefault();
-    setMensaje("");
-
-    if (
-      Number(formReunion.personas_asistentes) >
-      Number(formReunion.personas_convocadas)
-    ) {
-      mostrarMensaje(
-        "Las personas asistentes no pueden superar a las convocadas.",
-        "rojo"
-      );
+  async function saveMeeting(event) {
+    event.preventDefault();
+    setNotice("");
+    if (Number(meetingForm.personas_asistentes) > Number(meetingForm.personas_convocadas)) {
+      showNotice("Las personas asistentes no pueden superar a las convocadas.", "danger");
       return;
     }
-
-    if (
-      formReunion.entrego_premios &&
-      !listaPremiados
-    ) {
-      mostrarMensaje(
-        "Debe seleccionar el listado de personas premiadas.",
-        "rojo"
-      );
+    if (meetingForm.entrego_premios && !winnersFile) {
+      showNotice("Debe seleccionar el listado de personas premiadas.", "danger");
       return;
     }
-
-    setGuardando(true);
-
-    const { data: reunionCreada, error } =
-      await supabase
-        .from("reuniones")
-        .insert({
-          lider_id: liderSeleccionado.id,
-          tema: formReunion.tema.trim(),
-          descripcion: formReunion.descripcion.trim(),
-          fecha: formReunion.fecha,
-          lugar: formReunion.lugar.trim(),
-          personas_convocadas: Number(
-            formReunion.personas_convocadas
-          ),
-          personas_asistentes: Number(
-            formReunion.personas_asistentes
-          ),
-          entrego_premios:
-            formReunion.entrego_premios,
-          observaciones:
-            formReunion.observaciones.trim()
-        })
-        .select()
-        .single();
-
+    setSaving(true);
+    const { data, error } = await supabase.from("reuniones").insert({
+      lider_id: selectedLeader.id,
+      tema: meetingForm.tema.trim(),
+      descripcion: meetingForm.descripcion.trim(),
+      fecha: meetingForm.fecha,
+      lugar: meetingForm.lugar.trim(),
+      personas_convocadas: Number(meetingForm.personas_convocadas),
+      personas_asistentes: Number(meetingForm.personas_asistentes),
+      entrego_premios: meetingForm.entrego_premios,
+      observaciones: meetingForm.observaciones.trim()
+    }).select().single();
     if (error) {
-      mostrarMensaje(
-        "No fue posible guardar la reunión: " +
-          error.message,
-        "rojo"
-      );
-
-      setGuardando(false);
+      showNotice("No fue posible guardar la reunión: " + error.message, "danger");
+      setSaving(false);
       return;
     }
-
     try {
-      if (listaAsistentes) {
-        await subirArchivo(
-          listaAsistentes,
-          reunionCreada.id,
-          "LISTA_ASISTENTES"
-        );
-      }
-
-      if (listaPremiados) {
-        await subirArchivo(
-          listaPremiados,
-          reunionCreada.id,
-          "LISTA_PREMIADOS"
-        );
-      }
-
-      for (const fotografia of fotografias) {
-        await subirArchivo(
-          fotografia,
-          reunionCreada.id,
-          "FOTOGRAFIA"
-        );
-      }
-
-      mostrarMensaje(
-        "La reunión y sus evidencias fueron guardadas correctamente."
-      );
-
-      setFormReunion(reunionVacia);
-      setListaAsistentes(null);
-      setListaPremiados(null);
-      setFotografias([]);
+      await uploadEvidence(attendanceFile, data.id, "LISTA_ASISTENTES");
+      await uploadEvidence(winnersFile, data.id, "LISTA_PREMIADOS");
+      for (const photo of photos) await uploadEvidence(photo, data.id, "FOTOGRAFIA");
       setModal("");
-      await cargarDatos();
-    } catch (errorArchivo) {
-      mostrarMensaje(
-        "La reunión fue creada, pero ocurrió un problema cargando una evidencia: " +
-          errorArchivo.message,
-        "amarillo"
-      );
+      setMeetingForm(emptyMeeting);
+      showNotice("Reunión y evidencias guardadas correctamente.");
+      await loadData();
+    } catch (fileError) {
+      showNotice("La reunión fue creada, pero una evidencia no pudo cargarse: " + fileError.message, "warning");
+      await loadData();
     }
-
-    setGuardando(false);
+    setSaving(false);
   }
 
-  async function eliminarLider(id) {
-    const confirmar = window.confirm(
-      "¿Desea eliminar este líder y todas sus reuniones?"
-    );
-
-    if (!confirmar) return;
-
-    const { error } = await supabase
-      .from("lideres")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      mostrarMensaje(
-        "No fue posible eliminar el líder: " +
-          error.message,
-        "rojo"
-      );
-    } else {
-      mostrarMensaje("El líder fue eliminado.");
-      await cargarDatos();
+  async function deleteLeader(id) {
+    if (!window.confirm("¿Eliminar este líder y todas sus reuniones?")) return;
+    const { error } = await supabase.from("lideres").delete().eq("id", id);
+    if (error) showNotice("No fue posible eliminar el líder: " + error.message, "danger");
+    else {
+      showNotice("Líder eliminado.");
+      await loadData();
     }
   }
 
-  async function eliminarReunion(id) {
-    const confirmar = window.confirm(
-      "¿Desea eliminar esta reunión?"
-    );
-
-    if (!confirmar) return;
-
-    const { error } = await supabase
-      .from("reuniones")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      mostrarMensaje(
-        "No fue posible eliminar la reunión: " +
-          error.message,
-        "rojo"
-      );
-    } else {
-      mostrarMensaje("La reunión fue eliminada.");
-      await cargarDatos();
+  async function deleteMeeting(id) {
+    if (!window.confirm("¿Eliminar esta reunión?")) return;
+    const { error } = await supabase.from("reuniones").delete().eq("id", id);
+    if (error) showNotice("No fue posible eliminar la reunión: " + error.message, "danger");
+    else {
+      showNotice("Reunión eliminada.");
+      await loadData();
     }
   }
 
-  async function verEvidencias(reunion) {
-    setGuardando(true);
-    setMensaje("");
-
-    const { data, error } = await supabase
-      .from("evidencias")
-      .select("*")
-      .eq("reunion_id", reunion.id)
-      .order("creado_en", { ascending: true });
-
+  async function viewEvidence(meeting) {
+    setSaving(true);
+    const { data, error } = await supabase.from("evidencias").select("*").eq("reunion_id", meeting.id).order("creado_en");
     if (error) {
-      mostrarMensaje(
-        "No fue posible consultar las evidencias: " +
-          error.message,
-        "rojo"
-      );
-
-      setGuardando(false);
+      showNotice("No fue posible consultar evidencias: " + error.message, "danger");
+      setSaving(false);
       return;
     }
-
-    const archivosConEnlace = [];
-
-    for (const evidencia of data || []) {
-      const resultado = await supabase
-        .storage
-        .from("evidencias-reuniones")
-        .createSignedUrl(
-          evidencia.ruta_archivo,
-          3600
-        );
-
-      archivosConEnlace.push({
-        ...evidencia,
-        enlace: resultado.data
-          ? resultado.data.signedUrl
-          : ""
-      });
-    }
-
-    setLiderSeleccionado({
-      ...liderSeleccionado,
-      reunionActual: reunion,
-      evidenciasActuales: archivosConEnlace
-    });
-
-    setModal("evidencias");
-    setGuardando(false);
+    const items = await Promise.all((data || []).map(async (item) => {
+      const result = await supabase.storage.from("evidencias-reuniones").createSignedUrl(item.ruta_archivo, 3600);
+      return { ...item, enlace: result.data?.signedUrl || "" };
+    }));
+    setEvidenceMeeting(meeting);
+    setEvidence(items);
+    setModal("evidence");
+    setSaving(false);
   }
 
-  const lideresFiltrados = useMemo(() => {
-    const texto = busqueda.toLowerCase().trim();
+  const filteredLeaders = useMemo(() => {
+    const text = search.toLowerCase().trim();
+    return leaders.filter((leader) => `${leader.nombre || ""} ${leader.zona || ""} ${leader.telefono || ""}`.toLowerCase().includes(text));
+  }, [leaders, search]);
 
-    return lideres.filter((lider) => {
-      const contenido =
-        (lider.nombre || "") +
-        " " +
-        (lider.zona || "") +
-        " " +
-        (lider.telefono || "");
-
-      return contenido.toLowerCase().includes(texto);
-    });
-  }, [lideres, busqueda]);
-
-  function reunionesDelLider(liderId) {
-    return reuniones.filter((reunion) => {
-      return (
-        reunion.lider_id === liderId &&
-        Number(reunion.fecha.slice(0, 4)) ===
-          Number(anio)
-      );
-    });
+  function meetingsForLeader(id) {
+    return meetings.filter((meeting) => meeting.lider_id === id && Number(meeting.fecha.slice(0, 4)) === Number(year));
   }
 
-  if (cargando && !sesion) {
+  const noticeStyle = noticeType === "danger" ? S.danger : noticeType === "warning" ? S.warning : S.success;
+
+  if (loading && !session) return <main style={S.page}><div style={S.content}>Cargando aplicación...</div></main>;
+
+  if (!session) {
     return (
-      <main style={estilos.pagina}>
-        <div style={estilos.contenido}>
-          <p>Cargando aplicación...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (!sesion) {
-    return (
-      <main
-        style={{
-          ...estilos.pagina,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "20px"
-        }}
-      >
-        <form
-          style={{
-            ...estilos.tarjeta,
-            width: "100%",
-            maxWidth: "430px"
-          }}
-          onSubmit={iniciarSesion}
-        >
+      <main style={{ ...S.page, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <form style={{ ...S.card, width: "100%", maxWidth: 430 }} onSubmit={signIn}>
           <h1>Seguimiento de reuniones</h1>
-
           <p>Ingrese con una cuenta autorizada.</p>
-
-          {mensaje && (
-            <p
-              style={{
-                ...estilos.mensaje,
-                ...estilos[tipoMensaje]
-              }}
-            >
-              {mensaje}
-            </p>
-          )}
-
-          <label>
-            Correo electrónico
-            <input
-              required
-              type="email"
-              style={estilos.campo}
-              value={correo}
-              onChange={(evento) =>
-                setCorreo(evento.target.value)
-              }
-            />
-          </label>
-
-          <br />
-          <br />
-
-          <label>
-            Contraseña
-            <input
-              required
-              type="password"
-              style={estilos.campo}
-              value={contrasena}
-              onChange={(evento) =>
-                setContrasena(evento.target.value)
-              }
-            />
-          </label>
-
-          <br />
-          <br />
-
-          <button
-            style={{
-              ...estilos.boton,
-              ...estilos.azul,
-              width: "100%"
-            }}
-            disabled={guardando}
-          >
-            {guardando
-              ? "Ingresando..."
-              : "Iniciar sesión"}
-          </button>
+          {notice && <p style={{ ...S.message, ...noticeStyle }}>{notice}</p>}
+          <label>Correo electrónico<input required type="email" style={S.input} value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <br /><br />
+          <label>Contraseña<input required type="password" style={S.input} value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+          <br /><br />
+          <button style={{ ...S.button, ...S.primary, width: "100%" }} disabled={saving}>{saving ? "Ingresando..." : "Iniciar sesión"}</button>
         </form>
       </main>
     );
   }
 
   return (
-    <div style={estilos.pagina}>
-      <header style={estilos.encabezado}>
-        <div
-          style={{
-            maxWidth: "1150px",
-            margin: "0 auto",
-            ...estilos.fila,
-            justifyContent: "space-between"
-          }}
-        >
-          <div>
-            <h1 style={{ margin: 0 }}>
-              Seguimiento de reuniones
-            </h1>
-
-            <p
-              style={{
-                color: "#64748b",
-                marginBottom: 0
-              }}
-            >
-              Líderes, reuniones y evidencias
-            </p>
-          </div>
-
-          <div style={estilos.fila}>
-            <button
-              style={{
-                ...estilos.boton,
-                ...estilos.azul
-              }}
-              onClick={() => setModal("lider")}
-            >
-              + Agregar líder
-            </button>
-
-            <button
-              style={{
-                ...estilos.boton,
-                ...estilos.blanco
-              }}
-              onClick={cerrarSesion}
-            >
-              Cerrar sesión
-            </button>
+    <div style={S.page}>
+      <header style={S.header}>
+        <div style={{ maxWidth: 1150, margin: "0 auto", ...S.row, justifyContent: "space-between" }}>
+          <div><h1 style={{ margin: 0 }}>Seguimiento de reuniones</h1><p style={{ color: "#64748b", marginBottom: 0 }}>Líderes, reuniones y evidencias</p></div>
+          <div style={S.row}>
+            <button style={{ ...S.button, ...S.primary }} onClick={() => setModal("leader")}>+ Agregar líder</button>
+            <button style={{ ...S.button, ...S.secondary }} onClick={signOut}>Cerrar sesión</button>
           </div>
         </div>
       </header>
 
-      <main style={estilos.contenido}>
-        {mensaje && (
-          <p
-            style={{
-              ...estilos.mensaje,
-              ...estilos[tipoMensaje]
-            }}
-          >
-            {mensaje}
-          </p>
-        )}
-
-        <div
-          style={{
-            ...estilos.tarjeta,
-            ...estilos.fila,
-            marginBottom: "20px"
-          }}
-        >
-          <input
-            style={{
-              ...estilos.campo,
-              flex: 1,
-              minWidth: "230px",
-              marginTop: 0
-            }}
-            placeholder="Buscar por nombre, zona o teléfono"
-            value={busqueda}
-            onChange={(evento) =>
-              setBusqueda(evento.target.value)
-            }
-          />
-
-          <select
-            style={{
-              ...estilos.campo,
-              width: "130px",
-              marginTop: 0
-            }}
-            value={anio}
-            onChange={(evento) =>
-              setAnio(Number(evento.target.value))
-            }
-          >
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
-            <option value="2027">2027</option>
-            <option value="2028">2028</option>
+      <main style={S.content}>
+        {notice && <p style={{ ...S.message, ...noticeStyle }}>{notice}</p>}
+        <div style={{ ...S.card, ...S.row, marginBottom: 20 }}>
+          <input style={{ ...S.input, flex: 1, minWidth: 230, marginTop: 0 }} placeholder="Buscar por nombre, zona o teléfono" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select style={{ ...S.input, width: 130, marginTop: 0 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            {[2025, 2026, 2027, 2028].map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </div>
+        {loading ? <p>Cargando información...</p> : (
+          <div style={S.grid}>
+            {filteredLeaders.map((leader) => (
+              <section key={leader.id} style={S.card}>
+                <h2>{leader.nombre}</h2>
+                <p><b>Zona:</b> {leader.zona || "Sin registrar"}</p>
+                <p><b>Teléfono:</b> {leader.telefono || "Sin registrar"}</p>
+                <p><b>Reuniones en {year}:</b> {meetingsForLeader(leader.id).length}</p>
+                <div style={S.row}>
+                  <button style={{ ...S.button, ...S.primary }} onClick={() => openMeeting(leader)}>Registrar reunión</button>
+                  <button style={{ ...S.button, ...S.secondary }} onClick={() => { setSelectedLeader(leader); setModal("history"); }}>Ver reuniones</button>
+                  <button style={{ ...S.button, ...S.danger }} onClick={() => deleteLeader(leader.id)}>Eliminar</button>
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+      </main>
 
-        {cargando ? (
-          <p>Cargando información...</p>
-        ) : (
-          <div style={estilos.rejilla}>
-            {lideresFiltrados.map((lider) => {
-              const reunionesLider =
-                reunionesDelLider(lider.id);
+      {modal === "leader" && (
+        <div style={S.modalBg}><form style={S.modal} onSubmit={saveLeader}>
+          <h2>Agregar líder</h2>
+          <label>Nombre completo *<input required style={S.input} value={leaderForm.nombre} onChange={(e) => setLeaderForm({ ...leaderForm, nombre: e.target.value })} /></label><br /><br />
+          <label>Zona o sector<input style={S.input} value={leaderForm.zona} onChange={(e) => setLeaderForm({ ...leaderForm, zona: e.target.value })} /></label><br /><br />
+          <label>Teléfono<input style={S.input} value={leaderForm.telefono} onChange={(e) => setLeaderForm({ ...leaderForm, telefono: e.target.value })} /></label><br /><br />
+          <div style={S.row}><button type="button" style={{ ...S.button, ...S.secondary }} onClick={() => setModal("")}>Cancelar</button><button type="submit" style={{ ...S.button, ...S.primary }} disabled={saving}>{saving ? "Guardando..." : "Guardar líder"}</button></div>
+        </form></div>
+      )}
 
-              return (
-                <section
-                  key={lider.id}
-                  style={estilos.tarjeta}
-                >
-                  <h2>{lider.nombre}</h2>
+      {modal === "meeting" && selectedLeader && (
+        <div style={S.modalBg}><form style={S.modal} onSubmit={saveMeeting}>
+          <h2>Registrar reunión y evidencias</h2><p><b>Líder:</b> {selectedLeader.nombre}</p>
+          {notice && <p style={{ ...S.message, ...noticeStyle }}>{notice}</p>}
+          <label>Tema de la reunión *<input required style={S.input} value={meetingForm.tema} onChange={(e) => setMeetingForm({ ...meetingForm, tema: e.target.value })} /></label><br /><br />
+          <label>Breve descripción de la actividad *<textarea required rows="4" style={S.input} value={meetingForm.descripcion} onChange={(e) => setMeetingForm({ ...meetingForm, descripcion: e.target.value })} /></label><br /><br />
+          <div style={S.row}>
+            <label style={{ flex: 1 }}>Fecha *<input required type="date" style={S.input} value={meetingForm.fecha} onChange={(e) => setMeetingForm({ ...meetingForm, fecha: e.target.value })} /></label>
+            <label style={{ flex: 1 }}>Lugar<input style={S.input} value={meetingForm.lugar} onChange={(e) => setMeetingForm({ ...meetingForm, lugar: e.target.value })} /></label>
+          </div><br />
+          <div style={S.row}>
+            <label style={{ flex: 1 }}>Personas convocadas *<input required min="0" type="number" style={S.input} value={meetingForm.personas_convocadas} onChange={(e) => setMeetingForm({ ...meetingForm, personas_convocadas: e.target.value })} /></label>
+            <label style={{ flex: 1 }}>Personas asistentes *<input required min="0" type="number" style={S.input} value={meetingForm.personas_asistentes} onChange={(e) => setMeetingForm({ ...meetingForm, personas_asistentes: e.target.value })} /></label>
+          </div><br />
+          <div style={S.block}><b>Listado Excel de asistentes</b><p>Formatos XLSX, XLS o CSV.</p><input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setAttendanceFile(e.target.files?.[0] || null)} />{attendanceFile && <p>Seleccionado: <b>{attendanceFile.name}</b></p>}</div><br />
+          <div style={S.block}><b>Registro fotográfico</b><p>Puede seleccionar varias fotografías.</p><input type="file" accept="image/*" multiple onChange={(e) => setPhotos(Array.from(e.target.files || []))} />{photos.length > 0 && <p>Fotografías seleccionadas: <b>{photos.length}</b></p>}</div><br />
+          <div style={S.block}>
+            <label><input type="checkbox" checked={meetingForm.entrego_premios} onChange={(e) => { setMeetingForm({ ...meetingForm, entrego_premios: e.target.checked }); if (!e.target.checked) setWinnersFile(null); }} /> <b>Se entregaron premios</b></label>
+            {meetingForm.entrego_premios && <div style={{ marginTop: 15 }}><p>Listado Excel de personas premiadas.</p><input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setWinnersFile(e.target.files?.[0] || null)} />{winnersFile && <p>Seleccionado: <b>{winnersFile.name}</b></p>}</div>}
+          </div><br />
+          <label>Observaciones<textarea rows="3" style={S.input} value={meetingForm.observaciones} onChange={(e) => setMeetingForm({ ...meetingForm, observaciones: e.target.value })} /></label><br /><br />
+          <div style={S.row}><button type="button" style={{ ...S.button, ...S.secondary }} onClick={() => setModal("")}>Cancelar</button><button type="submit" style={{ ...S.button, ...S.primary }} disabled={saving}>{saving ? "Guardando..." : "Guardar reunión"}</button></div>
+        </form></div>
+      )}
 
-                  <p>
-                    <b>Zona:</b>{" "}
-                    {lider.zona || "Sin registrar"}
-                  </p>
+      {modal === "history" && selectedLeader && (
+        <div style={S.modalBg}><div style={S.modal}>
+          <div style={{ ...S.row, justifyContent: "space-between" }}><h2>Reuniones de {selectedLeader.nombre}</h2><button style={{ ...S.button, ...S.secondary }} onClick={() => setModal("")}>Cerrar</button></div>
+          <p>Historial correspondiente a {year}</p>
+          {meetingsForLeader(selectedLeader.id).length === 0 && <p style={S.block}>No hay reuniones registradas.</p>}
+          {meetingsForLeader(selectedLeader.id).map((item) => (
+            <article key={item.id} style={{ ...S.card, marginBottom: 15 }}>
+              <h3>{item.tema}</h3><p>{prettyDate(item.fecha)} | {item.lugar || "Sin lugar"}</p><p><b>Descripción:</b> {item.descripcion}</p>
+              <div style={S.row}><div style={{ ...S.block, flex: 1 }}><small>CONVOCADOS</small><h2>{item.personas_convocadas}</h2></div><div style={{ ...S.block, ...S.success, flex: 1 }}><small>ASISTIERON</small><h2>{item.personas_asistentes}</h2></div></div>
+              <p><b>Premios:</b> {item.entrego_premios ? "Sí" : "No"}</p>{item.observaciones && <p><b>Observaciones:</b> {item.observaciones}</p>}
+              <div style={S.row}><button style={{ ...S.button, ...S.secondary }} onClick={() => viewEvidence(item)}>Ver evidencias</button><button style={{ ...S.button, ...S.danger }} onClick={() => deleteMeeting(item.id)}>Eliminar reunión</button></div>
+            </article>
+          ))}
+        </div></div>
+      )}
 
-                  <p>
-                    <b>Teléfono:</b>{" "}
-                    {lider.telefono || "Sin registrar"}
-                  </p>
+      {modal === "evidence" && evidenceMeeting && (
+        <div style={S.modalBg}><div style={S.modal}>
+          <div style={{ ...S.row, justifyContent: "space-between" }}><h2>Evidencias de la reunión</h2><button style={{ ...S.button, ...S.secondary }} onClick={() => setModal("history")}>Regresar</button></div>
+          <h3>{evidenceMeeting.tema}</h3>
+          {evidence.length === 0 && <p style={S.block}>Esta reunión no tiene evidencias.</p>}
+          {evidence.map((item) => <div key={item.id} style={{ ...S.block, marginBottom: 12 }}><p><b>Tipo:</b> {item.tipo}</p><p><b>Archivo:</b> {item.nombre_archivo}</p>{item.enlace && <a href={item.enlace} target="_blank" rel="noreferrer">Abrir o descargar evidencia</a>}</div>)}
+        </div></div>
+      )}
+    </div>
+  );
+}
 
-                  <p>
-                    <b>Reuniones en {anio}:</b>{" "}
-                    {reunionesLider.length}
-                  </p>
-
-                  <div style={estilos.fila}>
-                    <button
-                      style={{
-                        ...estilos.boton,
-                        ...estilos.azul
-                      }}
-                      onClick={() =>
-                        abrirFormularioReunion(lider)
-                      }
-            
