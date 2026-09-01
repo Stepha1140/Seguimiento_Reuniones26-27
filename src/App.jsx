@@ -1,447 +1,52 @@
 import React, { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "./supabase.js";
 
-const S = {
-  page: { minHeight: "100vh", background: "#f4f7fb", color: "#172033", fontFamily: "Arial, sans-serif" },
-  header: { background: "#fff", borderBottom: "1px solid #dbe2ea", padding: 20 },
-  content: { maxWidth: 1150, margin: "0 auto", padding: 24 },
-  row: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 18 },
-  card: { background: "#fff", border: "1px solid #dbe2ea", borderRadius: 16, padding: 20, boxShadow: "0 6px 18px rgba(15,23,42,.06)" },
-  input: { width: "100%", boxSizing: "border-box", marginTop: 6, padding: 11, border: "1px solid #b9c4d2", borderRadius: 10 },
-  button: { border: 0, borderRadius: 10, padding: "11px 15px", cursor: "pointer", fontWeight: "bold" },
-  primary: { background: "#2563eb", color: "#fff" },
-  secondary: { background: "#fff", color: "#172033", border: "1px solid #b9c4d2" },
-  danger: { background: "#fff1f2", color: "#be123c", border: "1px solid #fecdd3" },
-  success: { background: "#ecfdf5", color: "#047857" },
-  warning: { background: "#fff7ed", color: "#9a3412" },
-  modalBg: { position: "fixed", inset: 0, zIndex: 20, background: "rgba(15,23,42,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 },
-  modal: { width: "100%", maxWidth: 800, maxHeight: "92vh", overflowY: "auto", background: "#fff", borderRadius: 18, padding: 24 },
-  block: { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 },
-  message: { padding: 12, borderRadius: 10, marginBottom: 15 }
-};
+const ZONAS=["Metropolitana","Suroccidente","Suroriente","Riomar","Centro Histórico"];
+const E={page:{minHeight:"100vh",background:"#f4f7fb",fontFamily:"Arial,sans-serif",color:"#172033"},header:{background:"white",padding:20,borderBottom:"1px solid #dbe2ea"},content:{maxWidth:1180,margin:"0 auto",padding:24},row:{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"},grid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(290px,1fr))",gap:18},card:{background:"white",border:"1px solid #dbe2ea",borderRadius:16,padding:20,boxShadow:"0 6px 18px rgba(15,23,42,.06)"},input:{width:"100%",boxSizing:"border-box",padding:11,marginTop:6,border:"1px solid #b9c4d2",borderRadius:10},btn:{border:0,borderRadius:10,padding:"11px 15px",cursor:"pointer",fontWeight:700},blue:{background:"#2563eb",color:"white"},white:{background:"white",border:"1px solid #b9c4d2",color:"#172033"},red:{background:"#fff1f2",border:"1px solid #fecdd3",color:"#be123c"},green:{background:"#ecfdf5",color:"#047857"},orange:{background:"#fff7ed",color:"#9a3412"},modalBg:{position:"fixed",inset:0,zIndex:20,background:"rgba(15,23,42,.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:16},modal:{width:"100%",maxWidth:1000,maxHeight:"92vh",overflowY:"auto",background:"white",borderRadius:18,padding:24},block:{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,padding:14},table:{width:"100%",borderCollapse:"collapse",minWidth:760},cell:{padding:11,borderBottom:"1px solid #e2e8f0",textAlign:"left"}};
+const LV={nombre:"",zona:"",telefono:""};
+const RV={tema:"",descripcion:"",fecha:"",lugar:"",personas_convocadas:"",personas_asistentes:"",entrego_premios:false,observaciones:""};
+const norm=v=>String(v??"").trim();
+const safe=v=>norm(v).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9._-]/g,"_");
+const fecha=f=>f?new Date(f+"T00:00:00").toLocaleDateString("es-CO",{day:"2-digit",month:"long",year:"numeric"}):"Sin fecha";
 
-const ZONES = ["Metropolitana", "Suroccidente", "Suroriente", "Riomar", "Centro Histórico"];
-const emptyLeader = { nombre: "", zona: "", telefono: "" };
-const emptyMeeting = {
-  tema: "", descripcion: "", fecha: "", lugar: "",
-  personas_convocadas: "", personas_asistentes: "",
-  entrego_premios: false, observaciones: ""
-};
-
-function prettyDate(value) {
-  if (!value) return "Sin fecha";
-  return new Date(value + "T00:00:00").toLocaleDateString("es-CO", {
-    day: "2-digit", month: "long", year: "numeric"
-  });
+export default function App(){
+ const [session,setSession]=useState(null),[email,setEmail]=useState(""),[password,setPassword]=useState("");
+ const [leaders,setLeaders]=useState([]),[meetings,setMeetings]=useState([]),[attendance,setAttendance]=useState([]),[people,setPeople]=useState([]);
+ const [loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[msg,setMsg]=useState(""),[kind,setKind]=useState("green");
+ const [search,setSearch]=useState(""),[year,setYear]=useState(new Date().getFullYear()),[modal,setModal]=useState(""),[leader,setLeader]=useState(null),[evidenceMeeting,setEvidenceMeeting]=useState(null),[evidence,setEvidence]=useState([]);
+ const [lf,setLf]=useState(LV),[rf,setRf]=useState(RV),[excel,setExcel]=useState(null),[winners,setWinners]=useState(null),[photos,setPhotos]=useState([]),[excelRows,setExcelRows]=useState([]);
+ const say=(t,k="green")=>{setMsg(t);setKind(k)};
+ useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)});const {data}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>data.subscription.unsubscribe()},[]);
+ useEffect(()=>{if(session)load();else{setLeaders([]);setMeetings([]);setAttendance([]);setPeople([])}},[session]);
+ async function load(){setLoading(true);const [a,b,c,d]=await Promise.all([supabase.from("lideres").select("*").order("nombre"),supabase.from("reuniones").select("*").order("fecha",{ascending:false}),supabase.from("asistencias").select("*"),supabase.from("personas").select("*")]);for(const x of [a,b,c,d])if(x.error)say(x.error.message,"red");setLeaders(a.data||[]);setMeetings(b.data||[]);setAttendance(c.data||[]);setPeople(d.data||[]);setLoading(false)}
+ async function login(e){e.preventDefault();setSaving(true);const {error}=await supabase.auth.signInWithPassword({email,password});if(error)say(error.message,"red");setSaving(false)}
+ async function saveLeader(e){e.preventDefault();setSaving(true);const {error}=await supabase.from("lideres").insert({...lf,estado:"Activo"});if(error)say(error.message,"red");else{setLf(LV);setModal("");say("Líder guardado");await load()}setSaving(false)}
+ function openMeeting(l){setLeader(l);setRf(RV);setExcel(null);setWinners(null);setPhotos([]);setExcelRows([]);setMsg("");setModal("meeting")}
+ async function readExcel(file){setExcel(file);if(!file){setExcelRows([]);return}try{const bytes=await file.arrayBuffer();const wb=XLSX.read(bytes,{type:"array"});const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});const parsed=rows.map(r=>({tipo_documento:norm(r.TipoDocumento||r.tipo_documento),numero_documento:norm(r.NumeroDocumento||r.numero_documento||r.Documento),nombre_completo:norm(r.NombreCompleto||r.nombre_completo||r.Nombre),telefono:norm(r.Telefono||r.telefono),zona:norm(r.Zona||r.zona)})).filter(r=>r.numero_documento&&r.nombre_completo);setExcelRows(parsed);say(`Excel leído: ${parsed.length} asistentes válidos.`)}catch(err){setExcelRows([]);say("No se pudo leer el Excel: "+err.message,"red")}}
+ async function upload(file,id,type){if(!file)return;const path=`${session.user.id}/${id}/${type}_${Date.now()}_${safe(file.name)}`;const up=await supabase.storage.from("evidencias-reuniones").upload(path,file);if(up.error)throw up.error;const rec=await supabase.from("evidencias").insert({reunion_id:id,tipo:type,nombre_archivo:file.name,ruta_archivo:path});if(rec.error)throw rec.error}
+ async function importAttendance(rows,meetingId){const unique=[...new Map(rows.map(r=>[r.numero_documento,r])).values()];for(const p of unique){const {data,error}=await supabase.from("personas").upsert(p,{onConflict:"numero_documento"}).select("id").single();if(error)throw error;const a=await supabase.from("asistencias").upsert({persona_id:data.id,reunion_id:meetingId},{onConflict:"persona_id,reunion_id"});if(a.error)throw a.error}}
+ async function saveMeeting(e){e.preventDefault();if(+rf.personas_asistentes>+rf.personas_convocadas)return say("Asistentes no puede superar convocados","red");if(excel&&excelRows.length===0)return say("El Excel no tiene columnas válidas","red");if(excelRows.length&&excelRows.length!==+rf.personas_asistentes)return say(`El Excel contiene ${excelRows.length} personas únicas, pero registraste ${rf.personas_asistentes} asistentes. Corrige antes de guardar.`,"red");setSaving(true);const {data,error}=await supabase.from("reuniones").insert({...rf,lider_id:leader.id,personas_convocadas:+rf.personas_convocadas,personas_asistentes:+rf.personas_asistentes}).select().single();if(error){say(error.message,"red");setSaving(false);return}try{if(excelRows.length)await importAttendance(excelRows,data.id);await upload(excel,data.id,"LISTA_ASISTENTES");await upload(winners,data.id,"LISTA_PREMIADOS");for(const p of photos)await upload(p,data.id,"FOTOGRAFIA");say("Reunión, asistentes y evidencias guardados");setModal("");await load()}catch(err){say("Reunión creada, pero faltó procesar una evidencia: "+err.message,"orange");await load()}setSaving(false)}
+ async function remove(table,id,text){if(!confirm(text))return;const {error}=await supabase.from(table).delete().eq("id",id);if(error)say(error.message,"red");else await load()}
+ async function viewEvidence(m){const {data,error}=await supabase.from("evidencias").select("*").eq("reunion_id",m.id);if(error)return say(error.message,"red");const out=await Promise.all((data||[]).map(async x=>{const r=await supabase.storage.from("evidencias-reuniones").createSignedUrl(x.ruta_archivo,3600);return{...x,url:r.data?.signedUrl||""}}));setEvidenceMeeting(m);setEvidence(out);setModal("evidence")}
+ const leaderMeetings=id=>meetings.filter(m=>m.lider_id===id&&+m.fecha.slice(0,4)===+year);
+ const filtered=useMemo(()=>leaders.filter(l=>`${l.nombre} ${l.zona} ${l.telefono}`.toLowerCase().includes(search.toLowerCase())),[leaders,search]);
+ const zones=useMemo(()=>{const rows=ZONAS.map(z=>{const ids=new Set(leaders.filter(l=>norm(l.zona).toLowerCase()===z.toLowerCase()).map(l=>l.id));const ms=meetings.filter(m=>ids.has(m.lider_id)&&+m.fecha.slice(0,4)===+year);return{zona:z,lideres:ids.size,reuniones:ms.length,convocados:ms.reduce((s,m)=>s+m.personas_convocadas,0),asistentes:ms.reduce((s,m)=>s+m.personas_asistentes,0)}});const total=rows.reduce((s,r)=>s+r.asistentes,0);return rows.map(r=>({...r,asistencia:r.convocados?Math.round(r.asistentes/r.convocados*100):0,peso:total?Math.round(r.asistentes/total*100):0})).sort((a,b)=>b.asistentes-a.asistentes)},[leaders,meetings,year]);
+ function leaderStats(id){const ms=leaderMeetings(id),ids=new Set(ms.map(m=>m.id)),as=attendance.filter(a=>ids.has(a.reunion_id)),counts={};as.forEach(a=>counts[a.persona_id]=(counts[a.persona_id]||0)+1);return{meetings:ms,conv:ms.reduce((s,m)=>s+m.personas_convocadas,0),att:ms.reduce((s,m)=>s+m.personas_asistentes,0),unique:Object.keys(counts).length,repeated:Object.values(counts).filter(n=>n>1).length,counts}}
+ function frequencyRows(id){const st=leaderStats(id);return Object.entries(st.counts).map(([pid,n])=>{const p=people.find(x=>x.id===+pid)||{};return{...p,veces:n}}).sort((a,b)=>b.veces-a.veces)}
+ const notice=kind==="red"?E.red:kind==="orange"?E.orange:E.green;
+ if(loading&&!session)return <main style={E.page}><div style={E.content}>Cargando...</div></main>;
+ if(!session)return <main style={{...E.page,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><form style={{...E.card,width:"100%",maxWidth:430}} onSubmit={login}><h1>Seguimiento de reuniones</h1>{msg&&<p style={{...E.block,...notice}}>{msg}</p>}<label>Correo<input required type="email" style={E.input} value={email} onChange={e=>setEmail(e.target.value)}/></label><br/><br/><label>Contraseña<input required type="password" style={E.input} value={password} onChange={e=>setPassword(e.target.value)}/></label><br/><br/><button style={{...E.btn,...E.blue,width:"100%"}}>{saving?"Ingresando...":"Iniciar sesión"}</button></form></main>;
+ return <div style={E.page}>
+  <header style={E.header}><div style={{maxWidth:1180,margin:"0 auto",...E.row,justifyContent:"space-between"}}><div><h1 style={{margin:0}}>Seguimiento de reuniones</h1><p style={{marginBottom:0,color:"#64748b"}}>Líderes, asistencia, frecuencia y rendimiento</p></div><div style={E.row}><button style={{...E.btn,...E.blue}} onClick={()=>setModal("leader")}>+ Agregar líder</button><button style={{...E.btn,...E.white}} onClick={()=>setModal("zones")}>Rendimiento por zonas</button><button style={{...E.btn,...E.white}} onClick={()=>supabase.auth.signOut()}>Cerrar sesión</button></div></div></header>
+  <main style={E.content}>{msg&&<p style={{...E.block,...notice}}>{msg}</p>}<div style={{...E.card,...E.row,marginBottom:20}}><input style={{...E.input,flex:1,marginTop:0}} placeholder="Buscar líder" value={search} onChange={e=>setSearch(e.target.value)}/><select style={{...E.input,width:130,marginTop:0}} value={year} onChange={e=>setYear(+e.target.value)}>{[2025,2026,2027,2028].map(y=><option key={y}>{y}</option>)}</select></div><div style={E.grid}>{filtered.map(l=>{const st=leaderStats(l.id);return <section key={l.id} style={E.card}><h2>{l.nombre}</h2><p><b>Zona:</b> {l.zona}</p><p><b>Teléfono:</b> {l.telefono}</p><p><b>Reuniones:</b> {st.meetings.length}</p><div style={E.row}><button style={{...E.btn,...E.blue}} onClick={()=>openMeeting(l)}>Registrar reunión</button><button style={{...E.btn,...E.white}} onClick={()=>{setLeader(l);setModal("history")}}>Ver reuniones</button><button style={{...E.btn,...E.white}} onClick={()=>{setLeader(l);setModal("performance")}}>Rendimiento</button><button style={{...E.btn,...E.white}} onClick={()=>{setLeader(l);setModal("frequency")}}>Repetidos</button><button style={{...E.btn,...E.red}} onClick={()=>remove("lideres",l.id,"¿Eliminar líder?")}>Eliminar</button></div></section>})}</div></main>
+  {modal==="leader"&&<div style={E.modalBg}><form style={E.modal} onSubmit={saveLeader}><h2>Agregar líder</h2><label>Nombre *<input required style={E.input} value={lf.nombre} onChange={e=>setLf({...lf,nombre:e.target.value})}/></label><br/><br/><label>Zona *<select required style={E.input} value={lf.zona} onChange={e=>setLf({...lf,zona:e.target.value})}><option value="">Seleccione</option>{ZONAS.map(z=><option key={z}>{z}</option>)}</select></label><br/><br/><label>Teléfono<input style={E.input} value={lf.telefono} onChange={e=>setLf({...lf,telefono:e.target.value})}/></label><br/><br/><div style={E.row}><button type="button" style={{...E.btn,...E.white}} onClick={()=>setModal("")}>Cancelar</button><button style={{...E.btn,...E.blue}}>Guardar</button></div></form></div>}
+  {modal==="meeting"&&leader&&<div style={E.modalBg}><form style={E.modal} onSubmit={saveMeeting}><h2>Registrar reunión y evidencias</h2><p><b>Líder:</b> {leader.nombre}</p>{msg&&<p style={{...E.block,...notice}}>{msg}</p>}<label>Tema *<input required style={E.input} value={rf.tema} onChange={e=>setRf({...rf,tema:e.target.value})}/></label><br/><br/><label>Descripción *<textarea required rows="3" style={E.input} value={rf.descripcion} onChange={e=>setRf({...rf,descripcion:e.target.value})}/></label><br/><br/><div style={E.row}><label style={{flex:1}}>Fecha *<input required type="date" style={E.input} value={rf.fecha} onChange={e=>setRf({...rf,fecha:e.target.value})}/></label><label style={{flex:1}}>Lugar<input style={E.input} value={rf.lugar} onChange={e=>setRf({...rf,lugar:e.target.value})}/></label></div><br/><div style={E.row}><label style={{flex:1}}>Convocados *<input required type="number" min="0" style={E.input} value={rf.personas_convocadas} onChange={e=>setRf({...rf,personas_convocadas:e.target.value})}/></label><label style={{flex:1}}>Asistentes *<input required type="number" min="0" style={E.input} value={rf.personas_asistentes} onChange={e=>setRf({...rf,personas_asistentes:e.target.value})}/></label></div><br/><div style={E.block}><b>Excel de asistentes</b><p>Columnas: TipoDocumento, NumeroDocumento, NombreCompleto, Telefono, Zona.</p><input type="file" accept=".xlsx,.xls,.csv" onChange={e=>readExcel(e.target.files?.[0]||null)}/>{excel&&<p>{excel.name}: <b>{excelRows.length} personas válidas</b></p>}</div><br/><div style={E.block}><b>Fotografías</b><br/><input type="file" accept="image/*" multiple onChange={e=>setPhotos([...e.target.files])}/></div><br/><div style={E.block}><label><input type="checkbox" checked={rf.entrego_premios} onChange={e=>setRf({...rf,entrego_premios:e.target.checked})}/> Se entregaron premios</label>{rf.entrego_premios&&<div><p>Excel de premiados</p><input type="file" accept=".xlsx,.xls,.csv" onChange={e=>setWinners(e.target.files?.[0]||null)}/></div>}</div><br/><label>Observaciones<textarea rows="3" style={E.input} value={rf.observaciones} onChange={e=>setRf({...rf,observaciones:e.target.value})}/></label><br/><br/><div style={E.row}><button type="button" style={{...E.btn,...E.white}} onClick={()=>setModal("")}>Cancelar</button><button style={{...E.btn,...E.blue}} disabled={saving}>{saving?"Guardando...":"Guardar"}</button></div></form></div>}
+  {modal==="zones"&&<div style={E.modalBg}><div style={E.modal}><div style={{...E.row,justifyContent:"space-between"}}><h2>Rendimiento por zonas</h2><button style={{...E.btn,...E.white}} onClick={()=>setModal("")}>Cerrar</button></div><Table headers={["Zona","Líderes","Reuniones","Convocados","Asistentes","Asistencia","Peso"]} rows={zones.map(z=>[z.zona,z.lideres,z.reuniones,z.convocados,z.asistentes,z.asistencia+"%",z.peso+"%"])}/></div></div>}
+  {modal==="performance"&&leader&&(()=>{const s=leaderStats(leader.id);return <div style={E.modalBg}><div style={E.modal}><div style={{...E.row,justifyContent:"space-between"}}><h2>Rendimiento de {leader.nombre}</h2><button style={{...E.btn,...E.white}} onClick={()=>setModal("")}>Cerrar</button></div><div style={E.grid}>{[["Reuniones",s.meetings.length],["Convocados",s.conv],["Asistentes",s.att],["No asistieron",s.conv-s.att],["Asistencia",(s.conv?Math.round(s.att/s.conv*100):0)+"%"],["Personas únicas",s.unique],["Personas repetidas",s.repeated]].map(([a,b])=><div key={a} style={E.block}><small>{a}</small><h2>{b}</h2></div>)}</div><h3>Rendimiento por reunión</h3><Table headers={["Reunión","Fecha","Convocados","Asistentes","No asistieron","Asistencia"]} rows={s.meetings.map(m=>[m.tema,fecha(m.fecha),m.personas_convocadas,m.personas_asistentes,m.personas_convocadas-m.personas_asistentes,(m.personas_convocadas?Math.round(m.personas_asistentes/m.personas_convocadas*100):0)+"%"])}/></div></div>})()}
+  {modal==="frequency"&&leader&&<div style={E.modalBg}><div style={E.modal}><div style={{...E.row,justifyContent:"space-between"}}><h2>Frecuencia de asistentes: {leader.nombre}</h2><button style={{...E.btn,...E.white}} onClick={()=>setModal("")}>Cerrar</button></div><p>Solo aparecen personas importadas desde Excel con número de documento.</p><Table headers={["Documento","Nombre","Teléfono","Veces que asistió"]} rows={frequencyRows(leader.id).map(p=>[p.numero_documento,p.nombre_completo,p.telefono,p.veces])}/></div></div>}
+  {modal==="history"&&leader&&<div style={E.modalBg}><div style={E.modal}><div style={{...E.row,justifyContent:"space-between"}}><h2>Reuniones de {leader.nombre}</h2><button style={{...E.btn,...E.white}} onClick={()=>setModal("")}>Cerrar</button></div>{leaderMeetings(leader.id).map(m=><article key={m.id} style={{...E.card,marginBottom:14}}><h3>{m.tema}</h3><p>{fecha(m.fecha)} | {m.lugar}</p><p>{m.descripcion}</p><p><b>Convocados:</b> {m.personas_convocadas} | <b>Asistentes:</b> {m.personas_asistentes} | <b>Asistencia:</b> {m.personas_convocadas?Math.round(m.personas_asistentes/m.personas_convocadas*100):0}%</p><div style={E.row}><button style={{...E.btn,...E.white}} onClick={()=>viewEvidence(m)}>Evidencias</button><button style={{...E.btn,...E.red}} onClick={()=>remove("reuniones",m.id,"¿Eliminar reunión?")}>Eliminar</button></div></article>)}</div></div>}
+  {modal==="evidence"&&<div style={E.modalBg}><div style={E.modal}><div style={{...E.row,justifyContent:"space-between"}}><h2>Evidencias: {evidenceMeeting?.tema}</h2><button style={{...E.btn,...E.white}} onClick={()=>setModal("history")}>Regresar</button></div>{evidence.map(x=><div key={x.id} style={{...E.block,marginBottom:10}}><b>{x.tipo}</b><p>{x.nombre_archivo}</p>{x.url&&<a href={x.url} target="_blank" rel="noreferrer">Abrir o descargar</a>}</div>)}</div></div>}
+ </div>
 }
-
-function safeName(value) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-export default function App() {
-  const [session, setSession] = useState(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [noticeType, setNoticeType] = useState("success");
-  const [leaders, setLeaders] = useState([]);
-  const [meetings, setMeetings] = useState([]);
-  const [search, setSearch] = useState("");
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [modal, setModal] = useState("");
-  const [selectedLeader, setSelectedLeader] = useState(null);
-  const [leaderForm, setLeaderForm] = useState(emptyLeader);
-  const [meetingForm, setMeetingForm] = useState(emptyMeeting);
-  const [attendanceFile, setAttendanceFile] = useState(null);
-  const [winnersFile, setWinnersFile] = useState(null);
-  const [photos, setPhotos] = useState([]);
-  const [evidenceMeeting, setEvidenceMeeting] = useState(null);
-  const [evidence, setEvidence] = useState([]);
-
-  useEffect(() => {
-    let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      setSession(data.session);
-      setLoading(false);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-    });
-    return () => {
-      mounted = false;
-      data.subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (session) loadData();
-    else {
-      setLeaders([]);
-      setMeetings([]);
-    }
-  }, [session]);
-
-  function showNotice(text, type = "success") {
-    setNotice(text);
-    setNoticeType(type);
-  }
-
-  async function signIn(event) {
-    event.preventDefault();
-    setSaving(true);
-    setNotice("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) showNotice("No fue posible iniciar sesión: " + error.message, "danger");
-    setSaving(false);
-  }
-
-  async function signOut() {
-    await supabase.auth.signOut();
-    setEmail("");
-    setPassword("");
-  }
-
-  async function loadData() {
-    setLoading(true);
-    const [leaderResult, meetingResult] = await Promise.all([
-      supabase.from("lideres").select("*").order("nombre", { ascending: true }),
-      supabase.from("reuniones").select("*").order("fecha", { ascending: false })
-    ]);
-    if (leaderResult.error) showNotice("Error consultando líderes: " + leaderResult.error.message, "danger");
-    else setLeaders(leaderResult.data || []);
-    if (meetingResult.error) showNotice("Error consultando reuniones: " + meetingResult.error.message, "danger");
-    else setMeetings(meetingResult.data || []);
-    setLoading(false);
-  }
-
-  async function saveLeader(event) {
-    event.preventDefault();
-    setSaving(true);
-    setNotice("");
-    const { error } = await supabase.from("lideres").insert({
-      nombre: leaderForm.nombre.trim(),
-      zona: leaderForm.zona.trim(),
-      telefono: leaderForm.telefono.trim(),
-      estado: "Activo"
-    });
-    if (error) showNotice("No fue posible guardar el líder: " + error.message, "danger");
-    else {
-      setLeaderForm(emptyLeader);
-      setModal("");
-      showNotice("Líder registrado correctamente.");
-      await loadData();
-    }
-    setSaving(false);
-  }
-
-  function openMeeting(leader) {
-    setSelectedLeader(leader);
-    setMeetingForm(emptyMeeting);
-    setAttendanceFile(null);
-    setWinnersFile(null);
-    setPhotos([]);
-    setNotice("");
-    setModal("meeting");
-  }
-
-  async function uploadEvidence(file, meetingId, type) {
-    if (!file) return;
-    const path = `${session.user.id}/${meetingId}/${type}_${Date.now()}_${safeName(file.name)}`;
-    const { error: uploadError } = await supabase.storage
-      .from("evidencias-reuniones")
-      .upload(path, file, { cacheControl: "3600", upsert: false });
-    if (uploadError) throw uploadError;
-    const { error: recordError } = await supabase.from("evidencias").insert({
-      reunion_id: meetingId,
-      tipo: type,
-      nombre_archivo: file.name,
-      ruta_archivo: path
-    });
-    if (recordError) throw recordError;
-  }
-
-  async function saveMeeting(event) {
-    event.preventDefault();
-    setNotice("");
-    if (Number(meetingForm.personas_asistentes) > Number(meetingForm.personas_convocadas)) {
-      showNotice("Las personas asistentes no pueden superar a las convocadas.", "danger");
-      return;
-    }
-    if (meetingForm.entrego_premios && !winnersFile) {
-      showNotice("Debe seleccionar el listado de personas premiadas.", "danger");
-      return;
-    }
-    setSaving(true);
-    const { data, error } = await supabase.from("reuniones").insert({
-      lider_id: selectedLeader.id,
-      tema: meetingForm.tema.trim(),
-      descripcion: meetingForm.descripcion.trim(),
-      fecha: meetingForm.fecha,
-      lugar: meetingForm.lugar.trim(),
-      personas_convocadas: Number(meetingForm.personas_convocadas),
-      personas_asistentes: Number(meetingForm.personas_asistentes),
-      entrego_premios: meetingForm.entrego_premios,
-      observaciones: meetingForm.observaciones.trim()
-    }).select().single();
-    if (error) {
-      showNotice("No fue posible guardar la reunión: " + error.message, "danger");
-      setSaving(false);
-      return;
-    }
-    try {
-      await uploadEvidence(attendanceFile, data.id, "LISTA_ASISTENTES");
-      await uploadEvidence(winnersFile, data.id, "LISTA_PREMIADOS");
-      for (const photo of photos) await uploadEvidence(photo, data.id, "FOTOGRAFIA");
-      setModal("");
-      setMeetingForm(emptyMeeting);
-      showNotice("Reunión y evidencias guardadas correctamente.");
-      await loadData();
-    } catch (fileError) {
-      showNotice("La reunión fue creada, pero una evidencia no pudo cargarse: " + fileError.message, "warning");
-      await loadData();
-    }
-    setSaving(false);
-  }
-
-  async function deleteLeader(id) {
-    if (!window.confirm("¿Eliminar este líder y todas sus reuniones?")) return;
-    const { error } = await supabase.from("lideres").delete().eq("id", id);
-    if (error) showNotice("No fue posible eliminar el líder: " + error.message, "danger");
-    else {
-      showNotice("Líder eliminado.");
-      await loadData();
-    }
-  }
-
-  async function deleteMeeting(id) {
-    if (!window.confirm("¿Eliminar esta reunión?")) return;
-    const { error } = await supabase.from("reuniones").delete().eq("id", id);
-    if (error) showNotice("No fue posible eliminar la reunión: " + error.message, "danger");
-    else {
-      showNotice("Reunión eliminada.");
-      await loadData();
-    }
-  }
-
-  async function viewEvidence(meeting) {
-    setSaving(true);
-    const { data, error } = await supabase.from("evidencias").select("*").eq("reunion_id", meeting.id).order("creado_en");
-    if (error) {
-      showNotice("No fue posible consultar evidencias: " + error.message, "danger");
-      setSaving(false);
-      return;
-    }
-    const items = await Promise.all((data || []).map(async (item) => {
-      const result = await supabase.storage.from("evidencias-reuniones").createSignedUrl(item.ruta_archivo, 3600);
-      return { ...item, enlace: result.data?.signedUrl || "" };
-    }));
-    setEvidenceMeeting(meeting);
-    setEvidence(items);
-    setModal("evidence");
-    setSaving(false);
-  }
-
-  const filteredLeaders = useMemo(() => {
-    const text = search.toLowerCase().trim();
-    return leaders.filter((leader) => `${leader.nombre || ""} ${leader.zona || ""} ${leader.telefono || ""}`.toLowerCase().includes(text));
-  }, [leaders, search]);
-
-  const zonePerformance = useMemo(() => {
-    const rows = ZONES.map((zone) => {
-      const zoneLeaders = leaders.filter((leader) =>
-        (leader.zona || "").trim().toLocaleLowerCase("es") === zone.toLocaleLowerCase("es")
-      );
-      const leaderIds = new Set(zoneLeaders.map((leader) => leader.id));
-      const zoneMeetings = meetings.filter((meeting) =>
-        leaderIds.has(meeting.lider_id) && Number(meeting.fecha.slice(0, 4)) === Number(year)
-      );
-      return {
-        zona: zone,
-        lideres: zoneLeaders.length,
-        reuniones: zoneMeetings.length,
-        convocados: zoneMeetings.reduce((sum, meeting) => sum + Number(meeting.personas_convocadas || 0), 0),
-        asistentes: zoneMeetings.reduce((sum, meeting) => sum + Number(meeting.personas_asistentes || 0), 0)
-      };
-    });
-    const totalAsistentes = rows.reduce((sum, row) => sum + row.asistentes, 0);
-    return rows.map((row) => ({
-      ...row,
-      asistencia: row.convocados ? Math.round((row.asistentes / row.convocados) * 100) : 0,
-      participacion: totalAsistentes ? Math.round((row.asistentes / totalAsistentes) * 100) : 0
-    })).sort((a, b) => b.asistentes - a.asistentes);
-  }, [leaders, meetings, year]);
-
-  const topZone = zonePerformance[0];
-
-  function meetingsForLeader(id) {
-    return meetings.filter((meeting) => meeting.lider_id === id && Number(meeting.fecha.slice(0, 4)) === Number(year));
-  }
-
-  const noticeStyle = noticeType === "danger" ? S.danger : noticeType === "warning" ? S.warning : S.success;
-
-  if (loading && !session) return <main style={S.page}><div style={S.content}>Cargando aplicación...</div></main>;
-
-  if (!session) {
-    return (
-      <main style={{ ...S.page, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-        <form style={{ ...S.card, width: "100%", maxWidth: 430 }} onSubmit={signIn}>
-          <h1>Seguimiento de reuniones</h1>
-          <p>Ingrese con una cuenta autorizada.</p>
-          {notice && <p style={{ ...S.message, ...noticeStyle }}>{notice}</p>}
-          <label>Correo electrónico<input required type="email" style={S.input} value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-          <br /><br />
-          <label>Contraseña<input required type="password" style={S.input} value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-          <br /><br />
-          <button style={{ ...S.button, ...S.primary, width: "100%" }} disabled={saving}>{saving ? "Ingresando..." : "Iniciar sesión"}</button>
-        </form>
-      </main>
-    );
-  }
-
-  return (
-    <div style={S.page}>
-      <header style={S.header}>
-        <div style={{ maxWidth: 1150, margin: "0 auto", ...S.row, justifyContent: "space-between" }}>
-          <div><h1 style={{ margin: 0 }}>Seguimiento de reuniones</h1><p style={{ color: "#64748b", marginBottom: 0 }}>Líderes, reuniones y evidencias</p></div>
-          <div style={S.row}>
-            <button style={{ ...S.button, ...S.primary }} onClick={() => setModal("leader")}>+ Agregar líder</button>
-            <button style={{ ...S.button, ...S.secondary }} onClick={() => setModal("performance")}>Rendimiento por zonas</button>
-            <button style={{ ...S.button, ...S.secondary }} onClick={signOut}>Cerrar sesión</button>
-          </div>
-        </div>
-      </header>
-
-      <main style={S.content}>
-        {notice && <p style={{ ...S.message, ...noticeStyle }}>{notice}</p>}
-        <div style={{ ...S.card, ...S.row, marginBottom: 20 }}>
-          <input style={{ ...S.input, flex: 1, minWidth: 230, marginTop: 0 }} placeholder="Buscar por nombre, zona o teléfono" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select style={{ ...S.input, width: 130, marginTop: 0 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {[2025, 2026, 2027, 2028].map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </div>
-        {loading ? <p>Cargando información...</p> : (
-          <div style={S.grid}>
-            {filteredLeaders.map((leader) => (
-              <section key={leader.id} style={S.card}>
-                <h2>{leader.nombre}</h2>
-                <p><b>Zona:</b> {leader.zona || "Sin registrar"}</p>
-                <p><b>Teléfono:</b> {leader.telefono || "Sin registrar"}</p>
-                <p><b>Reuniones en {year}:</b> {meetingsForLeader(leader.id).length}</p>
-                <div style={S.row}>
-                  <button style={{ ...S.button, ...S.primary }} onClick={() => openMeeting(leader)}>Registrar reunión</button>
-                  <button style={{ ...S.button, ...S.secondary }} onClick={() => { setSelectedLeader(leader); setModal("history"); }}>Ver reuniones</button>
-                  <button style={{ ...S.button, ...S.danger }} onClick={() => deleteLeader(leader.id)}>Eliminar</button>
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-      </main>
-
-      {modal === "leader" && (
-        <div style={S.modalBg}><form style={S.modal} onSubmit={saveLeader}>
-          <h2>Agregar líder</h2>
-          <label>Nombre completo *<input required style={S.input} value={leaderForm.nombre} onChange={(e) => setLeaderForm({ ...leaderForm, nombre: e.target.value })} /></label><br /><br />
-          <label>Zona o sector *
-            <select required style={S.input} value={leaderForm.zona} onChange={(e) => setLeaderForm({ ...leaderForm, zona: e.target.value })}>
-              <option value="">Seleccione una zona</option>
-              {ZONES.map((zone) => <option key={zone} value={zone}>{zone}</option>)}
-            </select>
-          </label><br /><br />
-          <label>Teléfono<input style={S.input} value={leaderForm.telefono} onChange={(e) => setLeaderForm({ ...leaderForm, telefono: e.target.value })} /></label><br /><br />
-          <div style={S.row}><button type="button" style={{ ...S.button, ...S.secondary }} onClick={() => setModal("")}>Cancelar</button><button type="submit" style={{ ...S.button, ...S.primary }} disabled={saving}>{saving ? "Guardando..." : "Guardar líder"}</button></div>
-        </form></div>
-      )}
-
-      {modal === "meeting" && selectedLeader && (
-        <div style={S.modalBg}><form style={S.modal} onSubmit={saveMeeting}>
-          <h2>Registrar reunión y evidencias</h2><p><b>Líder:</b> {selectedLeader.nombre}</p>
-          {notice && <p style={{ ...S.message, ...noticeStyle }}>{notice}</p>}
-          <label>Tema de la reunión *<input required style={S.input} value={meetingForm.tema} onChange={(e) => setMeetingForm({ ...meetingForm, tema: e.target.value })} /></label><br /><br />
-          <label>Breve descripción de la actividad *<textarea required rows="4" style={S.input} value={meetingForm.descripcion} onChange={(e) => setMeetingForm({ ...meetingForm, descripcion: e.target.value })} /></label><br /><br />
-          <div style={S.row}>
-            <label style={{ flex: 1 }}>Fecha *<input required type="date" style={S.input} value={meetingForm.fecha} onChange={(e) => setMeetingForm({ ...meetingForm, fecha: e.target.value })} /></label>
-            <label style={{ flex: 1 }}>Lugar<input style={S.input} value={meetingForm.lugar} onChange={(e) => setMeetingForm({ ...meetingForm, lugar: e.target.value })} /></label>
-          </div><br />
-          <div style={S.row}>
-            <label style={{ flex: 1 }}>Personas convocadas *<input required min="0" type="number" style={S.input} value={meetingForm.personas_convocadas} onChange={(e) => setMeetingForm({ ...meetingForm, personas_convocadas: e.target.value })} /></label>
-            <label style={{ flex: 1 }}>Personas asistentes *<input required min="0" type="number" style={S.input} value={meetingForm.personas_asistentes} onChange={(e) => setMeetingForm({ ...meetingForm, personas_asistentes: e.target.value })} /></label>
-          </div><br />
-          <div style={S.block}><b>Listado Excel de asistentes</b><p>Formatos XLSX, XLS o CSV.</p><input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setAttendanceFile(e.target.files?.[0] || null)} />{attendanceFile && <p>Seleccionado: <b>{attendanceFile.name}</b></p>}</div><br />
-          <div style={S.block}><b>Registro fotográfico</b><p>Puede seleccionar varias fotografías.</p><input type="file" accept="image/*" multiple onChange={(e) => setPhotos(Array.from(e.target.files || []))} />{photos.length > 0 && <p>Fotografías seleccionadas: <b>{photos.length}</b></p>}</div><br />
-          <div style={S.block}>
-            <label><input type="checkbox" checked={meetingForm.entrego_premios} onChange={(e) => { setMeetingForm({ ...meetingForm, entrego_premios: e.target.checked }); if (!e.target.checked) setWinnersFile(null); }} /> <b>Se entregaron premios</b></label>
-            {meetingForm.entrego_premios && <div style={{ marginTop: 15 }}><p>Listado Excel de personas premiadas.</p><input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setWinnersFile(e.target.files?.[0] || null)} />{winnersFile && <p>Seleccionado: <b>{winnersFile.name}</b></p>}</div>}
-          </div><br />
-          <label>Observaciones<textarea rows="3" style={S.input} value={meetingForm.observaciones} onChange={(e) => setMeetingForm({ ...meetingForm, observaciones: e.target.value })} /></label><br /><br />
-          <div style={S.row}><button type="button" style={{ ...S.button, ...S.secondary }} onClick={() => setModal("")}>Cancelar</button><button type="submit" style={{ ...S.button, ...S.primary }} disabled={saving}>{saving ? "Guardando..." : "Guardar reunión"}</button></div>
-        </form></div>
-      )}
-
-      {modal === "history" && selectedLeader && (
-        <div style={S.modalBg}><div style={S.modal}>
-          <div style={{ ...S.row, justifyContent: "space-between" }}><h2>Reuniones de {selectedLeader.nombre}</h2><button style={{ ...S.button, ...S.secondary }} onClick={() => setModal("")}>Cerrar</button></div>
-          <p>Historial correspondiente a {year}</p>
-          {meetingsForLeader(selectedLeader.id).length === 0 && <p style={S.block}>No hay reuniones registradas.</p>}
-          {meetingsForLeader(selectedLeader.id).map((item) => (
-            <article key={item.id} style={{ ...S.card, marginBottom: 15 }}>
-              <h3>{item.tema}</h3><p>{prettyDate(item.fecha)} | {item.lugar || "Sin lugar"}</p><p><b>Descripción:</b> {item.descripcion}</p>
-              <div style={S.row}><div style={{ ...S.block, flex: 1 }}><small>CONVOCADOS</small><h2>{item.personas_convocadas}</h2></div><div style={{ ...S.block, ...S.success, flex: 1 }}><small>ASISTIERON</small><h2>{item.personas_asistentes}</h2></div></div>
-              <p><b>Premios:</b> {item.entrego_premios ? "Sí" : "No"}</p>{item.observaciones && <p><b>Observaciones:</b> {item.observaciones}</p>}
-              <div style={S.row}><button style={{ ...S.button, ...S.secondary }} onClick={() => viewEvidence(item)}>Ver evidencias</button><button style={{ ...S.button, ...S.danger }} onClick={() => deleteMeeting(item.id)}>Eliminar reunión</button></div>
-            </article>
-          ))}
-        </div></div>
-      )}
-
-      {modal === "performance" && (
-        <div style={S.modalBg}><div style={{ ...S.modal, maxWidth: 1050 }}>
-          <div style={{ ...S.row, justifyContent: "space-between" }}>
-            <div><h2 style={{ marginBottom: 4 }}>Rendimiento por zonas</h2><p style={{ marginTop: 0, color: "#64748b" }}>Participación territorial correspondiente a {year}</p></div>
-            <button style={{ ...S.button, ...S.secondary }} onClick={() => setModal("")}>Cerrar</button>
-          </div>
-          <div style={{ ...S.block, ...S.success, marginBottom: 18 }}>
-            <b>Zona con mayor participación:</b>{" "}
-            {topZone && topZone.asistentes > 0 ? `${topZone.zona}, con ${topZone.asistentes} asistentes y ${topZone.participacion}% del total registrado.` : "Aún no hay reuniones con asistencia registrada en el año seleccionado."}
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-              <thead><tr style={{ background: "#eff6ff", textAlign: "left" }}>
-                {["Zona", "Líderes", "Reuniones", "Convocados", "Asistentes", "Asistencia", "Peso territorial"].map((label) => <th key={label} style={{ padding: 12, borderBottom: "1px solid #cbd5e1" }}>{label}</th>)}
-              </tr></thead>
-              <tbody>{zonePerformance.map((row) => (
-                <tr key={row.zona}>
-                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0", fontWeight: 700 }}>{row.zona}</td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.lideres}</td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.reuniones}</td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.convocados}</td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.asistentes}</td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>{row.asistencia}%</td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0", minWidth: 150 }}>
-                    <b>{row.participacion}%</b>
-                    <div style={{ height: 8, marginTop: 6, background: "#e2e8f0", borderRadius: 8 }}><div style={{ height: 8, width: `${row.participacion}%`, background: "#2563eb", borderRadius: 8 }} /></div>
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-          <p style={{ marginTop: 16, color: "#64748b", fontSize: 13 }}>Peso territorial = asistentes registrados en la zona dividido entre asistentes registrados en las cinco zonas. Este indicador representa participación en reuniones.</p>
-        </div></div>
-      )}
-
-      {modal === "evidence" && evidenceMeeting && (
-        <div style={S.modalBg}><div style={S.modal}>
-          <div style={{ ...S.row, justifyContent: "space-between" }}><h2>Evidencias de la reunión</h2><button style={{ ...S.button, ...S.secondary }} onClick={() => setModal("history")}>Regresar</button></div>
-          <h3>{evidenceMeeting.tema}</h3>
-          {evidence.length === 0 && <p style={S.block}>Esta reunión no tiene evidencias.</p>}
-          {evidence.map((item) => <div key={item.id} style={{ ...S.block, marginBottom: 12 }}><p><b>Tipo:</b> {item.tipo}</p><p><b>Archivo:</b> {item.nombre_archivo}</p>{item.enlace && <a href={item.enlace} target="_blank" rel="noreferrer">Abrir o descargar evidencia</a>}</div>)}
-        </div></div>
-      )}
-    </div>
-  );
-}
+function Table({headers,rows}){return <div style={{overflowX:"auto"}}><table style={E.table}><thead><tr style={{background:"#eff6ff"}}>{headers.map(h=><th key={h} style={E.cell}>{h}</th>)}</tr></thead><tbody>{rows.length?rows.map((r,i)=><tr key={i}>{r.map((v,j)=><td key={j} style={E.cell}>{v}</td>)}</tr>):<tr><td colSpan={headers.length} style={E.cell}>Sin datos</td></tr>}</tbody></table></div>}
