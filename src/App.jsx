@@ -103,7 +103,70 @@ export default function App(){
 }
 function pct(value,total){return total?Math.round(value/total*100):0}
 function PieChart({title,data,label}){const total=data.reduce((s,x)=>s+x.value,0);let used=0;const colors=data.map(x=>{const start=pct(used,total);used+=x.value;return `${x.color} ${start}% ${pct(used,total)}%`});return <section style={E.card}><h3 style={{marginTop:0,textAlign:"center"}}>{title}</h3><div style={{width:210,height:210,borderRadius:"50%",margin:"16px auto",background:total?`conic-gradient(${colors.join(",")})`:"#e2e8f0",display:"grid",placeItems:"center"}}><div style={{width:112,height:112,borderRadius:"50%",background:"white",display:"grid",placeItems:"center",textAlign:"center"}}><div><strong style={{fontSize:26}}>{total}</strong><br/><small>{label}</small></div></div></div>{data.map(x=><div key={x.name} style={{display:"flex",justifyContent:"space-between",gap:10,margin:"9px 0"}}><span><i style={{display:"inline-block",width:12,height:12,borderRadius:3,background:x.color,marginRight:7}}></i>{x.name}</span><b>{x.value} ({pct(x.value,total)}%)</b></div>)}</section>}
-function DashboardModule({meetings,cafeRecords,courseRecords,year,setYear,downloadCsv}){const rm=meetings.filter(x=>String(x.fecha||"").slice(0,4)===String(year)),rc=cafeRecords.filter(x=>String(x.fecha||"").slice(0,4)===String(year)),rk=courseRecords.filter(x=>String(x.fecha||"").slice(0,4)===String(year));const rows=[{name:"Reuniones",color:"#2563eb",activities:rm.length,target:rm.reduce((s,x)=>s+(+x.personas_convocadas||0),0),people:rm.reduce((s,x)=>s+(+x.personas_asistentes||0),0)},{name:"Café a tu Barrio",color:"#f59e0b",activities:rc.length,target:rc.reduce((s,x)=>s+(+x.convocados||0),0),people:rc.reduce((s,x)=>s+(+x.asistentes||0),0)},{name:"Cursos",color:"#10b981",activities:rk.length,target:rk.reduce((s,x)=>s+(+x.participantes||0),0),people:rk.reduce((s,x)=>s+(+x.asistentes||0),0)}];const totalA=rows.reduce((s,x)=>s+x.activities,0),totalP=rows.reduce((s,x)=>s+x.people,0),totalT=rows.reduce((s,x)=>s+x.target,0);const best=[...rows].sort((a,b)=>pct(b.people,b.target)-pct(a.people,a.target))[0];function exportData(){downloadCsv(`dashboard_${year}.csv`,["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento %","Peso %"],rows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target),pct(x.people,totalP)]))}return <main style={E.content}><div style={{...E.row,justifyContent:"space-between",marginBottom:20}}><div><h1 style={{marginBottom:4}}>Dashboard de estrategias</h1><p style={{marginTop:0,color:"#64748b"}}>Rendimiento comparativo por estrategia.</p></div><div style={E.row}><select style={{...E.input,width:130,marginTop:0}} value={year} onChange={e=>setYear(+e.target.value)}>{[2025,2026,2027,2028].map(y=><option key={y}>{y}</option>)}</select><button style={{...E.btn,...E.blue}} onClick={exportData}>Descargar dashboard</button></div></div><div style={{...E.grid,marginBottom:20}}>{[["Actividades",totalA],["Convocados o inscritos",totalT],["Asistentes o beneficiarios",totalP],["Rendimiento general",pct(totalP,totalT)+"%"]].map(([a,b])=><div key={a} style={E.card}><small style={{color:"#64748b"}}>{a}</small><h2 style={{fontSize:30,marginBottom:0}}>{b}</h2></div>)}</div>{totalA>0&&<div style={{...E.block,...E.green,marginBottom:20}}><b>Estrategia con mayor rendimiento:</b> {best.name}, con {pct(best.people,best.target)}%.</div>}<div style={E.grid}><PieChart title="Distribución de actividades" label="actividades" data={rows.map(x=>({name:x.name,value:x.activities,color:x.color}))}/><PieChart title="Distribución de participación" label="personas" data={rows.map(x=>({name:x.name,value:x.people,color:x.color}))}/><PieChart title="Rendimiento por estrategia" label="puntos %" data={rows.map(x=>({name:x.name,value:pct(x.people,x.target),color:x.color}))}/></div><section style={{...E.card,marginTop:20}}><h2>Detalle comparativo</h2><Table headers={["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento","Peso"]} rows={rows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target)+"%",pct(x.people,totalP)+"%"] )}/></section></main>}
+function DashboardSummaryCard({title,total,rows,field}){
+ return <section style={E.card}>
+  <small style={{color:"#64748b",fontSize:14}}>{title}</small>
+  <h2 style={{fontSize:34,marginTop:10,marginBottom:16,color:"#0f172a"}}>{total}</h2>
+  <div style={{borderTop:"1px solid #e2e8f0",paddingTop:12}}>
+   {rows.map(row=><div key={row.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"7px 0"}}>
+    <span style={{display:"flex",alignItems:"center",color:"#475569",fontSize:14}}>
+     <i style={{display:"inline-block",width:11,height:11,borderRadius:3,background:row.color,marginRight:8,flexShrink:0}}></i>{row.name}
+    </span>
+    <b style={{color:"#0f172a"}}>{row[field]}</b>
+   </div>)}
+  </div>
+ </section>
+}
+function DashboardModule({meetings,cafeRecords,courseRecords,year,setYear,downloadCsv}){
+ const rm=meetings.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
+ const rc=cafeRecords.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
+ const rk=courseRecords.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
+ const rows=[
+  {name:"Reuniones",color:"#2563eb",activities:rm.length,target:rm.reduce((s,x)=>s+(+x.personas_convocadas||0),0),people:rm.reduce((s,x)=>s+(+x.personas_asistentes||0),0)},
+  {name:"Café a tu Barrio",color:"#f59e0b",activities:rc.length,target:rc.reduce((s,x)=>s+(+x.convocados||0),0),people:rc.reduce((s,x)=>s+(+x.asistentes||0),0)},
+  {name:"Cursos",color:"#10b981",activities:rk.length,target:rk.reduce((s,x)=>s+(+x.participantes||0),0),people:rk.reduce((s,x)=>s+(+x.asistentes||0),0)}
+ ];
+ const totalA=rows.reduce((s,x)=>s+x.activities,0);
+ const totalP=rows.reduce((s,x)=>s+x.people,0);
+ const totalT=rows.reduce((s,x)=>s+x.target,0);
+ const best=[...rows].sort((a,b)=>pct(b.people,b.target)-pct(a.people,a.target))[0];
+ function exportData(){downloadCsv(`dashboard_${year}.csv`,["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento %","Peso %"],rows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target),pct(x.people,totalP)]))}
+ return <main style={E.content}>
+  <div style={{...E.row,justifyContent:"space-between",marginBottom:20}}>
+   <div><h1 style={{marginBottom:4}}>Dashboard de estrategias</h1><p style={{marginTop:0,color:"#64748b"}}>Rendimiento comparativo por estrategia.</p></div>
+   <div style={E.row}>
+    <select style={{...E.input,width:130,marginTop:0}} value={year} onChange={e=>setYear(+e.target.value)}>{[2025,2026,2027,2028].map(y=><option key={y} value={y}>{y}</option>)}</select>
+    <button style={{...E.btn,...E.blue}} onClick={exportData}>Descargar dashboard</button>
+   </div>
+  </div>
+  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:18,marginBottom:20}}>
+   <DashboardSummaryCard title="Actividades" total={totalA} rows={rows} field="activities"/>
+   <DashboardSummaryCard title="Convocados o inscritos" total={totalT} rows={rows} field="target"/>
+   <DashboardSummaryCard title="Asistentes o beneficiarios" total={totalP} rows={rows} field="people"/>
+   <section style={E.card}>
+    <small style={{color:"#64748b",fontSize:14}}>Rendimiento general</small>
+    <h2 style={{fontSize:34,marginTop:10,marginBottom:16,color:"#0f172a"}}>{pct(totalP,totalT)}%</h2>
+    <div style={{borderTop:"1px solid #e2e8f0",paddingTop:12}}>
+     {rows.map(row=><div key={row.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"7px 0"}}>
+      <span style={{display:"flex",alignItems:"center",color:"#475569",fontSize:14}}><i style={{display:"inline-block",width:11,height:11,borderRadius:3,background:row.color,marginRight:8}}></i>{row.name}</span>
+      <b style={{color:"#0f172a"}}>{pct(row.people,row.target)}%</b>
+     </div>)}
+    </div>
+   </section>
+  </div>
+  {totalA>0&&<div style={{...E.block,...E.green,marginBottom:20}}><b>Estrategia con mayor rendimiento:</b> {best.name}, con {pct(best.people,best.target)}%.</div>}
+  <div style={E.grid}>
+   <PieChart title="Distribución de actividades" label="actividades" data={rows.map(x=>({name:x.name,value:x.activities,color:x.color}))}/>
+   <PieChart title="Distribución de convocados o inscritos" label="personas" data={rows.map(x=>({name:x.name,value:x.target,color:x.color}))}/>
+   <PieChart title="Distribución de asistentes o beneficiarios" label="personas" data={rows.map(x=>({name:x.name,value:x.people,color:x.color}))}/>
+   <PieChart title="Rendimiento por estrategia" label="puntos %" data={rows.map(x=>({name:x.name,value:pct(x.people,x.target),color:x.color}))}/>
+  </div>
+  <section style={{...E.card,marginTop:20}}>
+   <h2>Detalle comparativo</h2>
+   <Table headers={["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento","Peso"]} rows={rows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target)+"%",pct(x.people,totalP)+"%"] )}/>
+  </section>
+ </main>
+}
 function Field({label,children}){return <label style={{display:"block",flex:1,minWidth:220}}><b>{label}</b>{children}</label>}
 function leaderData(leaders,id){return leaders.find(l=>String(l.id)===String(id))||{}}
 function CafeModule({leaders,records,reload,uploadFiles}){
