@@ -102,7 +102,7 @@ export default function App(){
  </div>
 }
 function pct(value,total){return total?Math.round(value/total*100):0}
-function PieChart({title,data,label}){const total=data.reduce((s,x)=>s+x.value,0);let used=0;const colors=data.map(x=>{const start=pct(used,total);used+=x.value;return `${x.color} ${start}% ${pct(used,total)}%`});return <section style={E.card}><h3 style={{marginTop:0,textAlign:"center"}}>{title}</h3><div style={{width:210,height:210,borderRadius:"50%",margin:"16px auto",background:total?`conic-gradient(${colors.join(",")})`:"#e2e8f0",display:"grid",placeItems:"center"}}><div style={{width:112,height:112,borderRadius:"50%",background:"white",display:"grid",placeItems:"center",textAlign:"center"}}><div><strong style={{fontSize:26}}>{total}</strong><br/><small>{label}</small></div></div></div>{data.map(x=><div key={x.name} style={{display:"flex",justifyContent:"space-between",gap:10,margin:"9px 0"}}><span><i style={{display:"inline-block",width:12,height:12,borderRadius:3,background:x.color,marginRight:7}}></i>{x.name}</span><b>{x.value} ({pct(x.value,total)}%)</b></div>)}</section>}
+function PieChart({title,data,label,hideTotal=false}){const total=data.reduce((s,x)=>s+x.value,0);let used=0;const colors=data.map(x=>{const start=pct(used,total);used+=x.value;return `${x.color} ${start}% ${pct(used,total)}%`});return <section style={E.card}><h3 style={{marginTop:0,textAlign:"center"}}>{title}</h3><div style={{width:210,height:210,borderRadius:"50%",margin:"16px auto",background:total?`conic-gradient(${colors.join(",")})`:"#e2e8f0",display:"grid",placeItems:"center"}}><div style={{width:112,height:112,borderRadius:"50%",background:"white",display:"grid",placeItems:"center",textAlign:"center"}}>{!hideTotal&&<div><strong style={{fontSize:26}}>{total}</strong><br/><small>{label}</small></div>}</div></div>{data.map(x=><div key={x.name} style={{display:"flex",justifyContent:"space-between",gap:10,margin:"9px 0"}}><span><i style={{display:"inline-block",width:12,height:12,borderRadius:3,background:x.color,marginRight:7}}></i>{x.name}</span><b>{x.value}%</b></div>)}</section>}
 function MetricDetailCard({title,total,rows,field}){
  return <section style={E.card}>
   <small style={{color:"#64748b",fontSize:14}}>{title}</small>
@@ -114,10 +114,6 @@ function MetricDetailCard({title,total,rows,field}){
    </div>)}
   </div>
  </section>
-}
-function DateBarChart({title,data,field,color,suffix=""}){
- const max=Math.max(...data.map(x=>x[field]),1);
- return <section style={{...E.card,overflow:"hidden"}}><h3 style={{marginTop:0}}>{title}</h3><p style={{color:"#64748b",fontSize:13}}>Resultados ordenados cronológicamente por fecha.</p>{data.length?<div style={{overflowX:"auto",paddingBottom:8}}><div style={{display:"flex",alignItems:"flex-end",gap:14,minWidth:Math.max(520,data.length*86),height:280,borderBottom:"1px solid #cbd5e1",padding:"20px 8px 0"}}>{data.map((item,index)=>{const value=item[field],barHeight=value?Math.max(value/max*190,8):2;return <div key={item.date+index} title={`${item.label}: ${value}${suffix}`} style={{flex:"1 0 68px",maxWidth:90,height:"100%",display:"flex",flexDirection:"column",justifyContent:"flex-end",alignItems:"center"}}><b style={{fontSize:13,marginBottom:6,color:"#0f172a"}}>{value.toLocaleString("es-CO")}{suffix}</b><div style={{width:"70%",height:barHeight,background:color,borderRadius:"7px 7px 0 0",boxShadow:`0 4px 10px ${color}33`,transition:"height .3s ease"}}></div><small style={{marginTop:8,textAlign:"center",color:"#475569",whiteSpace:"nowrap"}}>{item.shortDate}</small></div>})}</div></div>:<p style={E.block}>No hay registros para el período seleccionado.</p>}</section>
 }
 function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,year,setYear,downloadCsv}){
  const META_PERSONAS=20000;
@@ -154,11 +150,6 @@ function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,y
  const personasQueRepitieron=Object.values(identityCounts).filter(n=>n>1).length;
  const hasNominalData=dashboardFilter!=="cafe";
  const best=[...visibleRows].sort((a,b)=>pct(b.people,b.target)-pct(a.people,a.target))[0];
- const selectedColor=visibleRows[0]?.color||"#2563eb";
- const strategyRecords=dashboardFilter==="reuniones"?rm.map(x=>({date:x.fecha,target:+x.personas_convocadas||0,people:+x.personas_asistentes||0})):dashboardFilter==="cafe"?rc.map(x=>({date:x.fecha,target:+x.convocados||0,people:+x.asistentes||0})):dashboardFilter==="cursos"?rk.map(x=>({date:x.fecha,target:+x.participantes||0,people:+x.asistentes||0})):[];
- const dateMap={};
- strategyRecords.forEach(item=>{const key=item.date||"Sin fecha";if(!dateMap[key])dateMap[key]={date:key,activities:0,target:0,people:0};dateMap[key].activities+=1;dateMap[key].target+=item.target;dateMap[key].people+=item.people});
- const dateRows=Object.values(dateMap).sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(item=>({...item,performance:pct(item.people,item.target),label:item.date==="Sin fecha"?item.date:fecha(item.date),shortDate:item.date==="Sin fecha"?item.date:new Date(item.date+"T00:00:00").toLocaleDateString("es-CO",{day:"2-digit",month:"short"})}));
 
  function exportData(){
   const data=visibleRows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target),pct(x.people,totalP)]);
@@ -197,17 +188,12 @@ function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,y
   </section>
 
   {best&&totalA>0&&<div style={{...E.block,...E.green,marginBottom:20}}><b>Mayor rendimiento en la vista:</b> {best.name}, con {pct(best.people,best.target)}%.</div>}
-  {dashboardFilter==="general"?<div style={E.grid}>
+  <div style={E.grid}>
    <PieChart title="Actividades" label="actividades" data={visibleRows.map(x=>({name:x.name,value:x.activities,color:x.color}))}/>
    <PieChart title="Convocados o inscritos" label="personas" data={visibleRows.map(x=>({name:x.name,value:x.target,color:x.color}))}/>
    <PieChart title="Asistentes o beneficiarios" label="personas" data={visibleRows.map(x=>({name:x.name,value:x.people,color:x.color}))}/>
-   <PieChart title="Rendimiento" label="puntos %" data={visibleRows.map(x=>({name:x.name,value:pct(x.people,x.target),color:x.color}))}/>
-  </div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(430px,1fr))",gap:18}}>
-   <DateBarChart title="Actividades por fecha" data={dateRows} field="activities" color={selectedColor}/>
-   <DateBarChart title="Convocados o inscritos por fecha" data={dateRows} field="target" color="#7c3aed"/>
-   <DateBarChart title="Asistentes o beneficiarios por fecha" data={dateRows} field="people" color="#10b981"/>
-   <DateBarChart title="Rendimiento por fecha" data={dateRows} field="performance" color="#f59e0b" suffix="%"/>
-  </div>}
+   <PieChart title="Rendimiento" label="" hideTotal={true} data={visibleRows.map(x=>({name:x.name,value:pct(x.people,x.target),color:x.color}))}/>
+  </div>
   <section style={{...E.card,marginTop:20}}><h2>Detalle comparativo</h2><Table headers={["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento","Peso"]} rows={visibleRows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target)+"%",pct(x.people,totalP)+"%"] )}/></section>
  </main>
 }
