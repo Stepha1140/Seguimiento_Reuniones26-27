@@ -83,7 +83,7 @@ export default function App(){
    {[["dashboard","Dashboard"],["reuniones","Reuniones"],["cafe","Café a tu Barrio"],["cursos","Cursos"]].map(([id,label])=><button key={id} onClick={()=>setStrategy(id)} style={{...E.btn,width:"100%",marginBottom:10,textAlign:"left",background:strategy===id?"#2563eb":"#1e293b",color:"white"}}>{label}</button>)}
    <button onClick={()=>supabase.auth.signOut()} style={{...E.btn,width:"100%",marginTop:18,textAlign:"left",background:"transparent",border:"1px solid #475569",color:"white"}}>Cerrar sesión</button>
   </aside><div style={{flex:1,minWidth:0}}>
-  {strategy==="dashboard"&&<DashboardModule meetings={meetings} cafeRecords={cafeRecords} courseRecords={courseRecords} year={year} setYear={setYear} downloadCsv={downloadCsv}/>}
+  {strategy==="dashboard"&&<DashboardModule meetings={meetings} attendance={attendance} people={people} cafeRecords={cafeRecords} courseRecords={courseRecords} year={year} setYear={setYear} downloadCsv={downloadCsv}/>}
   {strategy==="reuniones"&&<>
   <header style={E.header}><div style={{maxWidth:1180,margin:"0 auto",...E.row,justifyContent:"space-between"}}><div><h1 style={{margin:0}}>Seguimiento de Estrategias</h1><p style={{marginBottom:0,color:"#64748b"}}>Reuniones, asistencia, frecuencia y rendimiento</p></div><div style={E.row}><button style={{...E.btn,...E.blue}} onClick={()=>setModal("leader")}>+ Agregar líder</button><button style={{...E.btn,...E.white}} onClick={()=>setModal("zones")}>Rendimiento por zonas</button><button style={{...E.btn,...E.white}} onClick={()=>setModal("zoneLeaders")}>Líderes por zona</button><button style={{...E.btn,...E.white}} onClick={exportAll}>Descargar información</button></div></div></header>
   <main style={E.content}>{msg&&<p style={{...E.block,...notice}}>{msg}</p>}<div style={{...E.card,...E.row,marginBottom:20}}><input style={{...E.input,flex:1,marginTop:0,minWidth:220}} placeholder="Buscar líder" value={search} onChange={e=>setSearch(e.target.value)}/><select style={{...E.input,width:210,marginTop:0}} value={zoneFilter} onChange={e=>setZoneFilter(e.target.value)}><option value="Todas">Todas las zonas</option>{ZONAS.map(z=><option key={z} value={z}>{z}</option>)}</select><select style={{...E.input,width:130,marginTop:0}} value={year} onChange={e=>setYear(+e.target.value)}>{[2025,2026,2027,2028].map(y=><option key={y}>{y}</option>)}</select></div>{filtered.length===0&&<p style={E.block}>No hay líderes registrados en la zona seleccionada.</p>}<div style={E.grid}>{filtered.map(l=>{const st=leaderStats(l.id);return <section key={l.id} style={E.card}><h2>{l.nombre}</h2><p><b>Zona:</b> {l.zona}</p><p><b>Teléfono:</b> {l.telefono}</p><p><b>Reuniones:</b> {st.meetings.length}</p><div style={E.row}><button style={{...E.btn,...E.blue}} onClick={()=>openMeeting(l)}>Registrar reunión</button><button style={{...E.btn,...E.white}} onClick={()=>{setLeader(l);setModal("history")}}>Ver reuniones</button><button style={{...E.btn,...E.white}} onClick={()=>{setLeader(l);setModal("performance")}}>Rendimiento</button><button style={{...E.btn,...E.white}} onClick={()=>{setLeader(l);setModal("frequency")}}>Repetidos</button><button style={{...E.btn,...E.red}} onClick={()=>remove("lideres",l.id,"¿Eliminar líder?")}>Eliminar</button></div></section>})}</div></main>
@@ -103,99 +103,98 @@ export default function App(){
 }
 function pct(value,total){return total?Math.round(value/total*100):0}
 function PieChart({title,data,label}){const total=data.reduce((s,x)=>s+x.value,0);let used=0;const colors=data.map(x=>{const start=pct(used,total);used+=x.value;return `${x.color} ${start}% ${pct(used,total)}%`});return <section style={E.card}><h3 style={{marginTop:0,textAlign:"center"}}>{title}</h3><div style={{width:210,height:210,borderRadius:"50%",margin:"16px auto",background:total?`conic-gradient(${colors.join(",")})`:"#e2e8f0",display:"grid",placeItems:"center"}}><div style={{width:112,height:112,borderRadius:"50%",background:"white",display:"grid",placeItems:"center",textAlign:"center"}}><div><strong style={{fontSize:26}}>{total}</strong><br/><small>{label}</small></div></div></div>{data.map(x=><div key={x.name} style={{display:"flex",justifyContent:"space-between",gap:10,margin:"9px 0"}}><span><i style={{display:"inline-block",width:12,height:12,borderRadius:3,background:x.color,marginRight:7}}></i>{x.name}</span><b>{x.value} ({pct(x.value,total)}%)</b></div>)}</section>}
-function DashboardSummaryCard({title,total,rows,field}){
+function MetricDetailCard({title,total,rows,field}){
  return <section style={E.card}>
   <small style={{color:"#64748b",fontSize:14}}>{title}</small>
-  <h2 style={{fontSize:34,marginTop:10,marginBottom:16,color:"#0f172a"}}>{total.toLocaleString("es-CO")}</h2>
-  <div style={{borderTop:"1px solid #e2e8f0",paddingTop:12}}>
-   {rows.map(row=><div key={row.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"7px 0"}}>
-    <span style={{display:"flex",alignItems:"center",color:"#475569",fontSize:14}}>
-     <i style={{display:"inline-block",width:11,height:11,borderRadius:3,background:row.color,marginRight:8,flexShrink:0}}></i>{row.name}
-    </span>
-    <b style={{color:"#0f172a"}}>{row[field].toLocaleString("es-CO")}</b>
+  <h2 style={{fontSize:34,margin:"10px 0 16px",color:"#0f172a"}}>{total.toLocaleString("es-CO")}</h2>
+  <div style={{borderTop:"1px solid #e2e8f0",paddingTop:10}}>
+   {rows.map(row=><div key={row.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"7px 0"}}>
+    <span style={{display:"flex",alignItems:"center",color:"#475569",fontSize:14}}><i style={{width:11,height:11,borderRadius:3,background:row.color,marginRight:8,display:"inline-block"}}></i>{row.name}</span>
+    <b>{row[field].toLocaleString("es-CO")}</b>
    </div>)}
   </div>
  </section>
 }
-function DashboardModule({meetings,cafeRecords,courseRecords,year,setYear,downloadCsv}){
+function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,year,setYear,downloadCsv}){
  const META_PERSONAS=20000;
+ const [dashboardFilter,setDashboardFilter]=useState("general");
  const rm=meetings.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
  const rc=cafeRecords.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
  const rk=courseRecords.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
- const rows=[
-  {name:"Reuniones",color:"#2563eb",activities:rm.length,target:rm.reduce((s,x)=>s+(+x.personas_convocadas||0),0),people:rm.reduce((s,x)=>s+(+x.personas_asistentes||0),0)},
-  {name:"Café a tu Barrio",color:"#f59e0b",activities:rc.length,target:rc.reduce((s,x)=>s+(+x.convocados||0),0),people:rc.reduce((s,x)=>s+(+x.asistentes||0),0)},
-  {name:"Cursos",color:"#10b981",activities:rk.length,target:rk.reduce((s,x)=>s+(+x.participantes||0),0),people:rk.reduce((s,x)=>s+(+x.asistentes||0),0)}
+ const allRows=[
+  {key:"reuniones",name:"Reuniones",color:"#2563eb",activities:rm.length,target:rm.reduce((s,x)=>s+(+x.personas_convocadas||0),0),people:rm.reduce((s,x)=>s+(+x.personas_asistentes||0),0)},
+  {key:"cafe",name:"Café a tu Barrio",color:"#f59e0b",activities:rc.length,target:rc.reduce((s,x)=>s+(+x.convocados||0),0),people:rc.reduce((s,x)=>s+(+x.asistentes||0),0)},
+  {key:"cursos",name:"Cursos",color:"#10b981",activities:rk.length,target:rk.reduce((s,x)=>s+(+x.participantes||0),0),people:rk.reduce((s,x)=>s+(+x.asistentes||0),0)}
  ];
- const totalA=rows.reduce((s,x)=>s+x.activities,0);
- const totalP=rows.reduce((s,x)=>s+x.people,0);
- const totalT=rows.reduce((s,x)=>s+x.target,0);
- const faltantesMeta=Math.max(META_PERSONAS-totalP,0);
- const avanceMeta=META_PERSONAS?Math.min((totalP/META_PERSONAS)*100,100):0;
- const avanceMetaTexto=avanceMeta.toLocaleString("es-CO",{minimumFractionDigits:2,maximumFractionDigits:2});
- const best=[...rows].sort((a,b)=>pct(b.people,b.target)-pct(a.people,a.target))[0];
+ const visibleRows=dashboardFilter==="general"?allRows:allRows.filter(x=>x.key===dashboardFilter);
+ const totalA=visibleRows.reduce((s,x)=>s+x.activities,0);
+ const totalT=visibleRows.reduce((s,x)=>s+x.target,0);
+ const totalP=visibleRows.reduce((s,x)=>s+x.people,0);
+ const generalPeople=allRows.reduce((s,x)=>s+x.people,0);
+ const faltantesMeta=Math.max(META_PERSONAS-generalPeople,0);
+ const avanceMeta=Math.min(generalPeople/META_PERSONAS*100,100);
+ const avanceTexto=avanceMeta.toLocaleString("es-CO",{minimumFractionDigits:2,maximumFractionDigits:2});
+
+ const personById=new Map(people.map(p=>[String(p.id),p]));
+ const meetingIds=new Set(rm.map(m=>String(m.id)));
+ const meetingKeys=attendance.filter(a=>meetingIds.has(String(a.reunion_id))).map(a=>{
+  const person=personById.get(String(a.persona_id));
+  return norm(person?.numero_documento)||`persona-${a.persona_id}`;
+ });
+ const courseKeys=rk.flatMap(c=>(c.lista||[]).map(person=>norm(person.documento)).filter(Boolean));
+ const identityKeys=dashboardFilter==="reuniones"?meetingKeys:dashboardFilter==="cursos"?courseKeys:dashboardFilter==="cafe"?[]:[...meetingKeys,...courseKeys];
+ const identityCounts={};
+ identityKeys.forEach(key=>identityCounts[key]=(identityCounts[key]||0)+1);
+ const personasNuevas=Object.keys(identityCounts).length;
+ const participacionesRepetidas=Math.max(identityKeys.length-personasNuevas,0);
+ const personasQueRepitieron=Object.values(identityCounts).filter(n=>n>1).length;
+ const hasNominalData=dashboardFilter!=="cafe";
+ const best=[...visibleRows].sort((a,b)=>pct(b.people,b.target)-pct(a.people,a.target))[0];
+
  function exportData(){
-  const detail=rows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target),pct(x.people,totalP)]);
-  detail.push(["META GENERAL","","",META_PERSONAS,"Avance "+avanceMetaTexto+"%","Faltan "+faltantesMeta]);
-  downloadCsv(`dashboard_${year}.csv`,["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento %","Peso %"],detail)
+  const data=visibleRows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target),pct(x.people,totalP)]);
+  data.push(["Personas identificadas únicas","","",personasNuevas,"",""]);
+  data.push(["Participaciones repetidas","","",participacionesRepetidas,"",""]);
+  data.push(["Meta general","","",META_PERSONAS,"Avance "+avanceTexto+"%","Faltan "+faltantesMeta]);
+  downloadCsv(`dashboard_${dashboardFilter}_${year}.csv`,["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento %","Peso %"],data)
  }
  return <main style={E.content}>
   <div style={{...E.row,justifyContent:"space-between",marginBottom:20}}>
-   <div><h1 style={{marginBottom:4}}>Dashboard de estrategias</h1><p style={{marginTop:0,color:"#64748b"}}>Rendimiento comparativo por estrategia y avance de la meta general.</p></div>
+   <div><h1 style={{marginBottom:4}}>Dashboard interactivo de estrategias</h1><p style={{marginTop:0,color:"#64748b"}}>Consulta la información general o filtra una estrategia específica.</p></div>
    <div style={E.row}>
+    <select style={{...E.input,width:220,marginTop:0}} value={dashboardFilter} onChange={e=>setDashboardFilter(e.target.value)}><option value="general">Vista general</option><option value="reuniones">Reuniones</option><option value="cafe">Café a tu Barrio</option><option value="cursos">Cursos</option></select>
     <select style={{...E.input,width:130,marginTop:0}} value={year} onChange={e=>setYear(+e.target.value)}>{[2025,2026,2027,2028].map(y=><option key={y} value={y}>{y}</option>)}</select>
-    <button style={{...E.btn,...E.blue}} onClick={exportData}>Descargar dashboard</button>
+    <button style={{...E.btn,...E.blue}} onClick={exportData}>Descargar vista</button>
    </div>
   </div>
 
-  <section style={{...E.card,marginBottom:20,border:"1px solid #bfdbfe",background:"linear-gradient(135deg,#eff6ff 0%,#ffffff 100%)"}}>
-   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:18,flexWrap:"wrap"}}>
-    <div>
-     <small style={{color:"#1d4ed8",fontWeight:700,fontSize:14}}>META GENERAL DE PERSONAS</small>
-     <h2 style={{fontSize:34,margin:"8px 0 4px",color:"#0f172a"}}>{totalP.toLocaleString("es-CO")} de {META_PERSONAS.toLocaleString("es-CO")}</h2>
-     <p style={{margin:0,color:"#475569"}}>Asistentes o beneficiarios registrados durante {year}</p>
-    </div>
-    <div style={{textAlign:"right"}}>
-     <strong style={{display:"block",fontSize:32,color:"#2563eb"}}>{avanceMetaTexto}%</strong>
-     <span style={{color:"#64748b"}}>de la meta alcanzada</span>
-    </div>
-   </div>
-   <div style={{height:18,background:"#dbeafe",borderRadius:999,overflow:"hidden",marginTop:22}}>
-    <div style={{width:`${avanceMeta}%`,height:"100%",background:"linear-gradient(90deg,#2563eb,#10b981)",borderRadius:999,transition:"width .4s ease"}}></div>
-   </div>
-   <div style={{display:"flex",justifyContent:"space-between",gap:15,flexWrap:"wrap",marginTop:12,color:"#475569"}}>
-    <span><b>Alcanzadas:</b> {totalP.toLocaleString("es-CO")}</span>
-    <span><b>Faltan:</b> {faltantesMeta.toLocaleString("es-CO")}</span>
-    <span><b>Meta:</b> {META_PERSONAS.toLocaleString("es-CO")}</span>
-   </div>
+  <section style={{...E.card,marginBottom:20,border:"1px solid #bfdbfe",background:"linear-gradient(135deg,#eff6ff,#fff)"}}>
+   <div style={{display:"flex",justifyContent:"space-between",gap:18,flexWrap:"wrap"}}><div><small style={{color:"#1d4ed8",fontWeight:700}}>META GENERAL DE PERSONAS</small><h2 style={{fontSize:34,margin:"8px 0 4px"}}>{generalPeople.toLocaleString("es-CO")} de {META_PERSONAS.toLocaleString("es-CO")}</h2><span style={{color:"#64748b"}}>La meta usa el acumulado general de todas las estrategias en {year}.</span></div><div style={{textAlign:"right"}}><strong style={{display:"block",fontSize:32,color:"#2563eb"}}>{avanceTexto}%</strong><span style={{color:"#64748b"}}>Faltan {faltantesMeta.toLocaleString("es-CO")}</span></div></div>
+   <div style={{height:18,background:"#dbeafe",borderRadius:999,overflow:"hidden",marginTop:20}}><div style={{height:"100%",width:`${avanceMeta}%`,background:"linear-gradient(90deg,#2563eb,#10b981)",borderRadius:999}}></div></div>
   </section>
 
-  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:18,marginBottom:20}}>
-   <DashboardSummaryCard title="Actividades" total={totalA} rows={rows} field="activities"/>
-   <DashboardSummaryCard title="Convocados o inscritos" total={totalT} rows={rows} field="target"/>
-   <DashboardSummaryCard title="Asistentes o beneficiarios" total={totalP} rows={rows} field="people"/>
-   <section style={E.card}>
-    <small style={{color:"#64748b",fontSize:14}}>Rendimiento general</small>
-    <h2 style={{fontSize:34,marginTop:10,marginBottom:16,color:"#0f172a"}}>{pct(totalP,totalT)}%</h2>
-    <div style={{borderTop:"1px solid #e2e8f0",paddingTop:12}}>
-     {rows.map(row=><div key={row.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"7px 0"}}>
-      <span style={{display:"flex",alignItems:"center",color:"#475569",fontSize:14}}><i style={{display:"inline-block",width:11,height:11,borderRadius:3,background:row.color,marginRight:8}}></i>{row.name}</span>
-      <b style={{color:"#0f172a"}}>{pct(row.people,row.target)}%</b>
-     </div>)}
-    </div>
-   </section>
+  <div style={{...E.block,marginBottom:20,background:"#eef2ff",borderColor:"#c7d2fe"}}><b>Vista activa:</b> {dashboardFilter==="general"?"Todas las estrategias":visibleRows[0]?.name} · <b>Año:</b> {year}</div>
+
+  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(245px,1fr))",gap:18,marginBottom:20}}>
+   <MetricDetailCard title="Actividades" total={totalA} rows={visibleRows} field="activities"/>
+   <MetricDetailCard title="Convocados o inscritos" total={totalT} rows={visibleRows} field="target"/>
+   <MetricDetailCard title="Asistentes o beneficiarios" total={totalP} rows={visibleRows} field="people"/>
+   <section style={E.card}><small style={{color:"#64748b"}}>Rendimiento de la vista</small><h2 style={{fontSize:34,margin:"10px 0 16px"}}>{pct(totalP,totalT)}%</h2><div style={{borderTop:"1px solid #e2e8f0",paddingTop:10}}>{visibleRows.map(row=><div key={row.key} style={{display:"flex",justifyContent:"space-between",padding:"7px 0"}}><span style={{color:"#475569"}}>{row.name}</span><b>{pct(row.people,row.target)}%</b></div>)}</div></section>
   </div>
-  {totalA>0&&<div style={{...E.block,...E.green,marginBottom:20}}><b>Estrategia con mayor rendimiento:</b> {best.name}, con {pct(best.people,best.target)}%.</div>}
+
+  <section style={{...E.card,marginBottom:20}}>
+   <h2 style={{marginTop:0}}>Personas nuevas y repetidas</h2>
+   {hasNominalData?<><p style={{color:"#64748b"}}>El cálculo usa los números de documento disponibles en los Excel de asistentes. “Participaciones repetidas” cuenta las asistencias adicionales de una persona después de su primera aparición durante el año seleccionado.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14}}><div style={{...E.block,borderColor:"#a7f3d0",background:"#ecfdf5"}}><small>Personas identificadas únicas</small><h2 style={{marginBottom:0,color:"#047857"}}>{personasNuevas.toLocaleString("es-CO")}</h2></div><div style={{...E.block,borderColor:"#fed7aa",background:"#fff7ed"}}><small>Participaciones repetidas</small><h2 style={{marginBottom:0,color:"#c2410c"}}>{participacionesRepetidas.toLocaleString("es-CO")}</h2></div><div style={{...E.block,borderColor:"#ddd6fe",background:"#f5f3ff"}}><small>Personas que asistieron más de una vez</small><h2 style={{marginBottom:0,color:"#6d28d9"}}>{personasQueRepitieron.toLocaleString("es-CO")}</h2></div><div style={{...E.block}}><small>Registros nominales analizados</small><h2 style={{marginBottom:0}}>{identityKeys.length.toLocaleString("es-CO")}</h2></div></div></>:<div style={{...E.block,...E.orange}}>Café a tu Barrio guarda totales de convocados y asistentes, pero no una lista con documentos. Para discriminar personas nuevas y repetidas en esta estrategia se debe agregar un Excel nominal de participantes.</div>}
+  </section>
+
+  {best&&totalA>0&&<div style={{...E.block,...E.green,marginBottom:20}}><b>Mayor rendimiento en la vista:</b> {best.name}, con {pct(best.people,best.target)}%.</div>}
   <div style={E.grid}>
-   <PieChart title="Distribución de actividades" label="actividades" data={rows.map(x=>({name:x.name,value:x.activities,color:x.color}))}/>
-   <PieChart title="Distribución de convocados o inscritos" label="personas" data={rows.map(x=>({name:x.name,value:x.target,color:x.color}))}/>
-   <PieChart title="Distribución de asistentes o beneficiarios" label="personas" data={rows.map(x=>({name:x.name,value:x.people,color:x.color}))}/>
-   <PieChart title="Rendimiento por estrategia" label="puntos %" data={rows.map(x=>({name:x.name,value:pct(x.people,x.target),color:x.color}))}/>
+   <PieChart title="Actividades" label="actividades" data={visibleRows.map(x=>({name:x.name,value:x.activities,color:x.color}))}/>
+   <PieChart title="Convocados o inscritos" label="personas" data={visibleRows.map(x=>({name:x.name,value:x.target,color:x.color}))}/>
+   <PieChart title="Asistentes o beneficiarios" label="personas" data={visibleRows.map(x=>({name:x.name,value:x.people,color:x.color}))}/>
+   <PieChart title="Rendimiento" label="puntos %" data={visibleRows.map(x=>({name:x.name,value:pct(x.people,x.target),color:x.color}))}/>
   </div>
-  <section style={{...E.card,marginTop:20}}>
-   <h2>Detalle comparativo</h2>
-   <Table headers={["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento","Peso"]} rows={rows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target)+"%",pct(x.people,totalP)+"%"] )}/>
-  </section>
+  <section style={{...E.card,marginTop:20}}><h2>Detalle comparativo</h2><Table headers={["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento","Peso"]} rows={visibleRows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target)+"%",pct(x.people,totalP)+"%"] )}/></section>
  </main>
 }
 function Field({label,children}){return <label style={{display:"block",flex:1,minWidth:220}}><b>{label}</b>{children}</label>}
