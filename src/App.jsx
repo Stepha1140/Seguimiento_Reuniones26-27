@@ -7,7 +7,6 @@ import "leaflet/dist/leaflet.css";
 const ZONAS=["Metropolitana","Suroccidente","Suroriente","Riomar","Centro Histórico"];
 const ADMIN_EMAIL="stephaniebecomas@gmail.com";
 const CONSULTA_EMAIL="stephaniebeco@gmail.com";
-const CONSULTA_EMAIL="palmasanjuanelov@gmail.com"
 const RESPONSIVE_CSS=`
 *{box-sizing:border-box}
 html,body,#root{margin:0;min-width:0;width:100%;overflow-x:hidden}
