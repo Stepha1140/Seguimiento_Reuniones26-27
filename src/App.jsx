@@ -106,18 +106,19 @@ function PieChart({title,data,label}){const total=data.reduce((s,x)=>s+x.value,0
 function DashboardSummaryCard({title,total,rows,field}){
  return <section style={E.card}>
   <small style={{color:"#64748b",fontSize:14}}>{title}</small>
-  <h2 style={{fontSize:34,marginTop:10,marginBottom:16,color:"#0f172a"}}>{total}</h2>
+  <h2 style={{fontSize:34,marginTop:10,marginBottom:16,color:"#0f172a"}}>{total.toLocaleString("es-CO")}</h2>
   <div style={{borderTop:"1px solid #e2e8f0",paddingTop:12}}>
    {rows.map(row=><div key={row.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"7px 0"}}>
     <span style={{display:"flex",alignItems:"center",color:"#475569",fontSize:14}}>
      <i style={{display:"inline-block",width:11,height:11,borderRadius:3,background:row.color,marginRight:8,flexShrink:0}}></i>{row.name}
     </span>
-    <b style={{color:"#0f172a"}}>{row[field]}</b>
+    <b style={{color:"#0f172a"}}>{row[field].toLocaleString("es-CO")}</b>
    </div>)}
   </div>
  </section>
 }
 function DashboardModule({meetings,cafeRecords,courseRecords,year,setYear,downloadCsv}){
+ const META_PERSONAS=20000;
  const rm=meetings.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
  const rc=cafeRecords.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
  const rk=courseRecords.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
@@ -129,16 +130,46 @@ function DashboardModule({meetings,cafeRecords,courseRecords,year,setYear,downlo
  const totalA=rows.reduce((s,x)=>s+x.activities,0);
  const totalP=rows.reduce((s,x)=>s+x.people,0);
  const totalT=rows.reduce((s,x)=>s+x.target,0);
+ const faltantesMeta=Math.max(META_PERSONAS-totalP,0);
+ const avanceMeta=META_PERSONAS?Math.min((totalP/META_PERSONAS)*100,100):0;
+ const avanceMetaTexto=avanceMeta.toLocaleString("es-CO",{minimumFractionDigits:2,maximumFractionDigits:2});
  const best=[...rows].sort((a,b)=>pct(b.people,b.target)-pct(a.people,a.target))[0];
- function exportData(){downloadCsv(`dashboard_${year}.csv`,["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento %","Peso %"],rows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target),pct(x.people,totalP)]))}
+ function exportData(){
+  const detail=rows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target),pct(x.people,totalP)]);
+  detail.push(["META GENERAL","","",META_PERSONAS,"Avance "+avanceMetaTexto+"%","Faltan "+faltantesMeta]);
+  downloadCsv(`dashboard_${year}.csv`,["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento %","Peso %"],detail)
+ }
  return <main style={E.content}>
   <div style={{...E.row,justifyContent:"space-between",marginBottom:20}}>
-   <div><h1 style={{marginBottom:4}}>Dashboard de estrategias</h1><p style={{marginTop:0,color:"#64748b"}}>Rendimiento comparativo por estrategia.</p></div>
+   <div><h1 style={{marginBottom:4}}>Dashboard de estrategias</h1><p style={{marginTop:0,color:"#64748b"}}>Rendimiento comparativo por estrategia y avance de la meta general.</p></div>
    <div style={E.row}>
     <select style={{...E.input,width:130,marginTop:0}} value={year} onChange={e=>setYear(+e.target.value)}>{[2025,2026,2027,2028].map(y=><option key={y} value={y}>{y}</option>)}</select>
     <button style={{...E.btn,...E.blue}} onClick={exportData}>Descargar dashboard</button>
    </div>
   </div>
+
+  <section style={{...E.card,marginBottom:20,border:"1px solid #bfdbfe",background:"linear-gradient(135deg,#eff6ff 0%,#ffffff 100%)"}}>
+   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:18,flexWrap:"wrap"}}>
+    <div>
+     <small style={{color:"#1d4ed8",fontWeight:700,fontSize:14}}>META GENERAL DE PERSONAS</small>
+     <h2 style={{fontSize:34,margin:"8px 0 4px",color:"#0f172a"}}>{totalP.toLocaleString("es-CO")} de {META_PERSONAS.toLocaleString("es-CO")}</h2>
+     <p style={{margin:0,color:"#475569"}}>Asistentes o beneficiarios registrados durante {year}</p>
+    </div>
+    <div style={{textAlign:"right"}}>
+     <strong style={{display:"block",fontSize:32,color:"#2563eb"}}>{avanceMetaTexto}%</strong>
+     <span style={{color:"#64748b"}}>de la meta alcanzada</span>
+    </div>
+   </div>
+   <div style={{height:18,background:"#dbeafe",borderRadius:999,overflow:"hidden",marginTop:22}}>
+    <div style={{width:`${avanceMeta}%`,height:"100%",background:"linear-gradient(90deg,#2563eb,#10b981)",borderRadius:999,transition:"width .4s ease"}}></div>
+   </div>
+   <div style={{display:"flex",justifyContent:"space-between",gap:15,flexWrap:"wrap",marginTop:12,color:"#475569"}}>
+    <span><b>Alcanzadas:</b> {totalP.toLocaleString("es-CO")}</span>
+    <span><b>Faltan:</b> {faltantesMeta.toLocaleString("es-CO")}</span>
+    <span><b>Meta:</b> {META_PERSONAS.toLocaleString("es-CO")}</span>
+   </div>
+  </section>
+
   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:18,marginBottom:20}}>
    <DashboardSummaryCard title="Actividades" total={totalA} rows={rows} field="activities"/>
    <DashboardSummaryCard title="Convocados o inscritos" total={totalT} rows={rows} field="target"/>
