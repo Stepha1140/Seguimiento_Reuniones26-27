@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 
 const ZONAS=["Metropolitana","Suroccidente","Suroriente","Riomar","Centro Histórico"];
 const ADMIN_EMAIL="stephaniebecomas@gmail.com";
-const CONSULTA_EMAIL="stephaniebeco@gmail.com";
+const CONSULTA_EMAILS=["stephaniebeco@gmail.com","palmasanjuanelov@gmail.com"];
 const RESPONSIVE_CSS=`
 *{box-sizing:border-box}
 html,body,#root{margin:0;min-width:0;width:100%;overflow-x:hidden}
@@ -69,7 +69,7 @@ export default function App(){
  const say=(t,k="green")=>{setMsg(t);setKind(k)};
  const currentEmail=norm(session?.user?.email).toLowerCase();
  const isAdmin=currentEmail===ADMIN_EMAIL;
- const isConsulta=currentEmail===CONSULTA_EMAIL;
+ const isConsulta=CONSULTA_EMAILS.includes(currentEmail);
  const canWrite=!isConsulta;
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)});const {data}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>data.subscription.unsubscribe()},[]);
  useEffect(()=>{if(session)load();else{setLeaders([]);setMeetings([]);setAttendance([]);setPeople([])}},[session]);
