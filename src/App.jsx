@@ -142,7 +142,7 @@ export default function App(){
    {isAdmin&&<><p style={{margin:"22px 0 9px",fontSize:12,fontWeight:800,letterSpacing:1,color:"#94a3b8",textTransform:"uppercase"}}>Administración privada</p><button onClick={()=>{setStrategy("configuracion");setSidebarOpen(false)}} style={{...E.btn,width:"100%",textAlign:"left",background:strategy==="configuracion"?"#7c3aed":"#312e81",color:"white"}}>⚙ Configuración</button></>}
    <button onClick={()=>supabase.auth.signOut()} style={{...E.btn,width:"100%",marginTop:18,textAlign:"left",background:"transparent",border:"1px solid #475569",color:"white"}}>Cerrar sesión</button>
   </aside><div className="responsive-main" style={{flex:1,minWidth:0}}>
-  {strategy==="dashboard"&&<DashboardModule meetings={meetings} attendance={attendance} people={people} cafeRecords={cafeRecords} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} year={year} setYear={setYear} downloadCsv={downloadCsv}/>}
+  {strategy==="dashboard"&&<DashboardModule meetings={meetings} attendance={attendance} people={people} cafeRecords={cafeRecords} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} leaders={leaders} year={year} setYear={setYear} downloadCsv={downloadCsv}/>}
   {strategy==="mapa"&&<MapModule meetings={meetings} cafeRecords={cafeRecords} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} leaders={leaders} year={year} setYear={setYear}/>}
   {strategy==="repitencia"&&<BeneficiaryRepetitionModule attendance={attendance} people={people} meetings={meetings} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} year={year} setYear={setYear} downloadCsv={downloadCsv}/>}
   {strategy==="finanzas"&&<FinancialModule records={financialRecords} reload={load} canWrite={canWrite} isAdmin={isAdmin} meetings={meetings} attendance={attendance} people={people} cafeRecords={cafeRecords} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs}/>}
@@ -195,7 +195,7 @@ function DateBarChart({title,data,field,color,suffix=""}){
   </div>:<p style={E.block}>No hay registros para esta estrategia en el período seleccionado.</p>}
  </section>
 }
-function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,dynamicRecords,strategyConfigs,year,setYear,downloadCsv}){
+function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,dynamicRecords,strategyConfigs,leaders,year,setYear,downloadCsv}){
  const META_PERSONAS=20000;
  const [dashboardFilter,setDashboardFilter]=useState("general");
  const rm=meetings.filter(x=>String(x.fecha||"").slice(0,4)===String(year));
@@ -208,6 +208,21 @@ function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,d
   {key:"cursos",name:"Cursos",color:"#10b981",activities:rk.length,target:rk.reduce((s,x)=>s+(+x.participantes||0),0),people:rk.reduce((s,x)=>s+(+x.asistentes||0),0)},
   ...dynamicRows
  ];
+ const [zoneDashboardFilter,setZoneDashboardFilter]=useState("Todas");
+ const leaderZoneMap=new Map((leaders||[]).map(l=>[String(l.id),l.zona||"Sin zona"]));
+ const territorialEntries=[
+  ...rm.map(x=>({strategy:"reuniones",name:"Reuniones",color:"#2563eb",zone:leaderZoneMap.get(String(x.lider_id))||"Sin zona",activities:1,people:+x.personas_asistentes||0,target:+x.personas_convocadas||0})),
+  ...rc.map(x=>({strategy:"cafe",name:"Café a tu Barrio",color:"#f59e0b",zone:x.zona||leaderZoneMap.get(String(x.lider_id))||"Sin zona",activities:1,people:+x.asistentes||0,target:+x.convocados||0})),
+  ...rk.map(x=>({strategy:"cursos",name:"Cursos",color:"#10b981",zone:x.zona||leaderZoneMap.get(String(x.lider_id))||"Sin zona",activities:1,people:+x.asistentes||0,target:+x.participantes||0})),
+  ...(dynamicRecords||[]).filter(r=>String(r.datos?.fecha||r.created_at||"").slice(0,4)===String(year)).map(r=>{const d=r.datos||{},c=(strategyConfigs||[]).find(x=>String(x.id)===String(r.estrategia_id));return{strategy:c?.codigo||r.codigo_estrategia,name:c?.nombre||r.codigo_estrategia||"Otra estrategia",color:c?.color||"#6366f1",zone:d.zona||leaderZoneMap.get(String(d.lider_id))||"Sin zona",activities:1,people:+d.numero_beneficiarios||+d.beneficiarios||+d.asistentes||+d.personas||1,target:+d.convocados||+d.inscritos||+d.participantes||+d.meta||+d.cantidad||0}})
+ ];
+ const territorialZones=[...new Set([...ZONAS,...territorialEntries.map(x=>x.zone).filter(Boolean)])];
+ const zoneRows=territorialZones.map(zone=>{const entries=territorialEntries.filter(x=>norm(x.zone).toLowerCase()===norm(zone).toLowerCase()),groups={};entries.forEach(x=>{if(!groups[x.strategy])groups[x.strategy]={key:x.strategy,name:x.name,color:x.color,activities:0,people:0,target:0};groups[x.strategy].activities+=x.activities;groups[x.strategy].people+=x.people;groups[x.strategy].target+=x.target});return{zone,activities:entries.reduce((a,x)=>a+x.activities,0),people:entries.reduce((a,x)=>a+x.people,0),target:entries.reduce((a,x)=>a+x.target,0),strategies:Object.values(groups)}}).filter(x=>x.activities||ZONAS.includes(x.zone));
+ const territorialTotalPeople=zoneRows.reduce((a,z)=>a+z.people,0);
+ const selectedZoneRows=zoneDashboardFilter==="Todas"?zoneRows:zoneRows.filter(z=>z.zone===zoneDashboardFilter);
+ const strategyInfluence={};territorialEntries.filter(x=>zoneDashboardFilter==="Todas"||x.zone===zoneDashboardFilter).forEach(x=>{if(!strategyInfluence[x.strategy])strategyInfluence[x.strategy]={key:x.strategy,name:x.name,color:x.color,activities:0,people:0,target:0,zones:new Set()};const row=strategyInfluence[x.strategy];row.activities+=x.activities;row.people+=x.people;row.target+=x.target;row.zones.add(x.zone)});
+ const influenceRows=Object.values(strategyInfluence).sort((a,b)=>b.people-a.people);
+ function exportTerritorial(){downloadCsv(`influencia_territorial_${zoneDashboardFilter}_${year}.csv`,["Zona","Estrategia","Actividades","Convocados o meta","Participantes o beneficiarios","Rendimiento %","Influencia en la zona %"],selectedZoneRows.flatMap(zone=>zone.strategies.map(row=>[zone.zone,row.name,row.activities,row.target,row.people,pct(row.people,row.target),pct(row.people,zone.people)])))}
  const visibleRows=dashboardFilter==="general"?allRows:allRows.filter(x=>x.key===dashboardFilter);
  const totalA=visibleRows.reduce((s,x)=>s+x.activities,0);
  const totalT=visibleRows.reduce((s,x)=>s+x.target,0);
@@ -301,6 +316,10 @@ function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,d
    <DateBarChart title="Asistentes o beneficiarios por fecha" data={dateRows} field="people" color="#10b981"/>
    <DateBarChart title="Rendimiento por fecha" data={dateRows} field="performance" color="#f59e0b" suffix="%"/>
   </div>}
+  <section style={{...E.card,marginTop:20}}><div style={{...E.row,justifyContent:"space-between"}}><div><h2 style={{marginBottom:4}}>Influencia territorial por zonas</h2><p style={{marginTop:0,color:"#64748b"}}>Compara la cobertura de las estrategias según actividades y participantes registrados en cada zona.</p></div><div style={E.row}><select style={{...E.input,width:210,marginTop:0}} value={zoneDashboardFilter} onChange={e=>setZoneDashboardFilter(e.target.value)}><option value="Todas">Todas las zonas</option>{territorialZones.map(zone=><option key={zone} value={zone}>{zone}</option>)}</select><button style={{...E.btn,...E.blue}} onClick={exportTerritorial}>Descargar análisis</button></div></div>
+  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:14,margin:"18px 0"}}><div style={E.block}><small>Zonas con actividad</small><h2>{zoneRows.filter(z=>z.activities).length}</h2></div><div style={E.block}><small>Actividades territoriales</small><h2>{selectedZoneRows.reduce((a,z)=>a+z.activities,0)}</h2></div><div style={E.block}><small>Participantes o beneficiarios</small><h2>{selectedZoneRows.reduce((a,z)=>a+z.people,0).toLocaleString("es-CO")}</h2></div><div style={E.block}><small>Zona con mayor influencia</small><h3>{[...selectedZoneRows].sort((a,b)=>b.people-a.people)[0]?.zone||"Sin datos"}</h3></div></div>
+  <h3>Participación de las estrategias {zoneDashboardFilter==="Todas"?"en el territorio":`en ${zoneDashboardFilter}`}</h3>{influenceRows.length?<div style={{display:"grid",gap:12,marginBottom:20}}>{influenceRows.map(row=>{const max=Math.max(...influenceRows.map(x=>x.people),1);return <div key={row.key} style={E.block}><div style={{display:"flex",justifyContent:"space-between",gap:12}}><b>{row.name}</b><span>{row.people.toLocaleString("es-CO")} personas · {row.activities} actividades</span></div><div style={{height:13,background:"#e2e8f0",borderRadius:999,overflow:"hidden",marginTop:9}}><div style={{height:"100%",width:`${row.people/max*100}%`,background:row.color,borderRadius:999}}></div></div><small style={{color:"#64748b"}}>Presencia en {row.zones.size} zona(s) · Rendimiento {pct(row.people,row.target)}%</small></div>})}</div>:<p style={E.block}>No hay información territorial para el filtro seleccionado.</p>}
+  <h3>Detalle por zona y estrategia</h3><Table headers={["Zona","Estrategia","Actividades","Convocados o meta","Participantes o beneficiarios","Rendimiento","Influencia en la zona"]} rows={selectedZoneRows.flatMap(zone=>zone.strategies.map(row=>[zone.zone,row.name,row.activities,row.target,row.people,pct(row.people,row.target)+"%",pct(row.people,zone.people)+"%"]))}/><p style={{fontSize:13,color:"#64748b"}}><b>Influencia en la zona</b> representa el porcentaje de participantes de una estrategia sobre el total de participantes registrados en esa zona. No mide intención de voto ni influencia política individual.</p></section>
   <section style={{...E.card,marginTop:20}}><h2>Detalle comparativo</h2><Table headers={["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento","Peso"]} rows={visibleRows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target)+"%",pct(x.people,totalP)+"%"] )}/></section>
  </main>
 }
