@@ -136,7 +136,7 @@ export default function App(){
   <aside className={`app-sidebar ${sidebarOpen?"open":""}`} style={{width:260,minWidth:260,minHeight:"100vh",background:"#0f172a",color:"white",padding:20,boxSizing:"border-box",position:"sticky",top:0,alignSelf:"flex-start"}}>
    <h2 style={{margin:"0 0 6px"}}>Estrategias</h2><p style={{margin:"0 0 8px",fontSize:13,color:"#cbd5e1"}}>Panel de seguimiento</p>{isAdmin&&<p style={{margin:"0 0 22px",padding:"7px 9px",background:"#14532d",borderRadius:8,fontSize:12}}>Administrador</p>}{isConsulta&&<p style={{margin:"0 0 22px",padding:"7px 9px",background:"#334155",borderRadius:8,fontSize:12}}>Solo consulta</p>}
    <p style={{margin:"20px 0 9px",fontSize:12,fontWeight:800,letterSpacing:1,color:"#94a3b8",textTransform:"uppercase"}}>Generalidades</p>
-   {[["dashboard","Dashboard"],["mapa","Mapa territorial"],["lideres","Líderes"],["finanzas","Gestión Financiera"]].map(([id,label])=><button key={id} onClick={()=>{setStrategy(id);setSidebarOpen(false)}} style={{...E.btn,width:"100%",marginBottom:10,textAlign:"left",background:strategy===id?"#2563eb":"#1e293b",color:"white"}}>{label}</button>)}
+   {[["dashboard","Dashboard"],["mapa","Mapa territorial"],["lideres","Líderes"],["repitencia","Repitencia de beneficiarios"],["finanzas","Gestión Financiera"]].map(([id,label])=><button key={id} onClick={()=>{setStrategy(id);setSidebarOpen(false)}} style={{...E.btn,width:"100%",marginBottom:10,textAlign:"left",background:strategy===id?"#2563eb":"#1e293b",color:"white"}}>{label}</button>)}
    <p style={{margin:"20px 0 9px",fontSize:12,fontWeight:800,letterSpacing:1,color:"#94a3b8",textTransform:"uppercase"}}>Estrategias</p>
    {[["reuniones","Reuniones"],["cafe","Café a tu Barrio"],["cursos","Cursos"],["becas","Becas"],["juventud","Juventud"],["gestion","Gestión Empresarial"]].map(([id,label])=><button key={id} onClick={()=>{setStrategy(id);setSidebarOpen(false)}} style={{...E.btn,width:"100%",marginBottom:10,textAlign:"left",background:strategy===id?"#2563eb":"#1e293b",color:"white"}}>{label}</button>)}
    {isAdmin&&<><p style={{margin:"22px 0 9px",fontSize:12,fontWeight:800,letterSpacing:1,color:"#94a3b8",textTransform:"uppercase"}}>Administración privada</p><button onClick={()=>{setStrategy("configuracion");setSidebarOpen(false)}} style={{...E.btn,width:"100%",textAlign:"left",background:strategy==="configuracion"?"#7c3aed":"#312e81",color:"white"}}>⚙ Configuración</button></>}
@@ -144,6 +144,7 @@ export default function App(){
   </aside><div className="responsive-main" style={{flex:1,minWidth:0}}>
   {strategy==="dashboard"&&<DashboardModule meetings={meetings} attendance={attendance} people={people} cafeRecords={cafeRecords} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} year={year} setYear={setYear} downloadCsv={downloadCsv}/>}
   {strategy==="mapa"&&<MapModule meetings={meetings} cafeRecords={cafeRecords} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} leaders={leaders} year={year} setYear={setYear}/>}
+  {strategy==="repitencia"&&<BeneficiaryRepetitionModule attendance={attendance} people={people} meetings={meetings} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} year={year} setYear={setYear} downloadCsv={downloadCsv}/>}
   {strategy==="finanzas"&&<FinancialModule records={financialRecords} reload={load} canWrite={canWrite} isAdmin={isAdmin} meetings={meetings} attendance={attendance} people={people} cafeRecords={cafeRecords} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs}/>}
   {strategy==="configuracion"&&isAdmin&&<PrivateConfiguration configs={strategyConfigs} reload={load}/>}
   {["becas","juventud","gestion"].includes(strategy)&&<DynamicStrategyModule code={strategy} config={strategyConfigs.find(x=>x.codigo===strategy||String(x.nombre||"").toLowerCase()===({becas:"becados",juventud:"juventud",gestion:"gestión empresarial"}[strategy]))} records={dynamicRecords} leaders={leaders} reload={load} canWrite={canWrite} isAdmin={isAdmin}/>}
@@ -287,7 +288,7 @@ function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,d
    {hasNominalData?<><p style={{color:"#64748b"}}>El cálculo usa los números de documento disponibles en los Excel de asistentes. “Participaciones repetidas” cuenta las asistencias adicionales de una persona después de su primera aparición durante el año seleccionado.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14}}><div style={{...E.block,borderColor:"#a7f3d0",background:"#ecfdf5"}}><small>Personas identificadas únicas</small><h2 style={{marginBottom:0,color:"#047857"}}>{personasNuevas.toLocaleString("es-CO")}</h2></div><div style={{...E.block,borderColor:"#fed7aa",background:"#fff7ed"}}><small>Participaciones repetidas</small><h2 style={{marginBottom:0,color:"#c2410c"}}>{participacionesRepetidas.toLocaleString("es-CO")}</h2></div><div style={{...E.block,borderColor:"#ddd6fe",background:"#f5f3ff"}}><small>Personas que asistieron más de una vez</small><h2 style={{marginBottom:0,color:"#6d28d9"}}>{personasQueRepitieron.toLocaleString("es-CO")}</h2></div><div style={{...E.block}}><small>Registros nominales analizados</small><h2 style={{marginBottom:0}}>{identityKeys.length.toLocaleString("es-CO")}</h2></div></div></>:<div style={{...E.block,...E.orange}}>Café a tu Barrio guarda totales de convocados y asistentes, pero no una lista con documentos. Para discriminar personas nuevas y repetidas en esta estrategia se debe agregar un Excel nominal de participantes.</div>}
   </section>
 
-  <CrossStrategyBeneficiaries attendance={attendance} people={people} meetings={rm} courseRecords={rk} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} year={year} downloadCsv={downloadCsv}/>
+  
   {best&&totalA>0&&<div style={{...E.block,...E.green,marginBottom:20}}><b>Mayor rendimiento en la vista:</b> {best.name}, con {pct(best.people,best.target)}%.</div>}
   {dashboardFilter==="general"?<div style={E.grid}>
    <PieChart title="Actividades" label="actividades" data={visibleRows.map(x=>({name:x.name,value:x.activities,color:x.color}))}/>
@@ -304,6 +305,17 @@ function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,d
  </main>
 }
 function normalizeIdentity(value){return norm(value).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+function BeneficiaryRepetitionModule({attendance,people,meetings,courseRecords,dynamicRecords,strategyConfigs,year,setYear,downloadCsv}){
+ const yearMeetings=(meetings||[]).filter(item=>String(item.fecha||"").slice(0,4)===String(year));
+ const yearCourses=(courseRecords||[]).filter(item=>String(item.fecha||"").slice(0,4)===String(year));
+ return <main className="responsive-content" style={E.content}>
+  <div style={{...E.row,justifyContent:"space-between",marginBottom:20}}>
+   <div><h1 style={{marginBottom:4}}>Repitencia de beneficiarios</h1><p style={{marginTop:0,color:"#64748b"}}>Identifica personas que participan en dos o más estrategias y compara su nivel de repitencia.</p></div>
+   <select style={{...E.input,width:130,marginTop:0}} value={year} onChange={e=>setYear(+e.target.value)}>{[2025,2026,2027,2028].map(value=><option key={value} value={value}>{value}</option>)}</select>
+  </div>
+  <CrossStrategyBeneficiaries attendance={attendance} people={people} meetings={yearMeetings} courseRecords={yearCourses} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} year={year} downloadCsv={downloadCsv}/>
+ </main>
+}
 function CrossStrategyBeneficiaries({attendance,people,meetings,courseRecords,dynamicRecords,strategyConfigs,year,downloadCsv}){
  const personMap=new Map((people||[]).map(p=>[String(p.id),p]));
  const meetingIds=new Set((meetings||[]).map(m=>String(m.id)));
