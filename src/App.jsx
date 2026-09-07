@@ -287,6 +287,7 @@ function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,d
    {hasNominalData?<><p style={{color:"#64748b"}}>El cálculo usa los números de documento disponibles en los Excel de asistentes. “Participaciones repetidas” cuenta las asistencias adicionales de una persona después de su primera aparición durante el año seleccionado.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14}}><div style={{...E.block,borderColor:"#a7f3d0",background:"#ecfdf5"}}><small>Personas identificadas únicas</small><h2 style={{marginBottom:0,color:"#047857"}}>{personasNuevas.toLocaleString("es-CO")}</h2></div><div style={{...E.block,borderColor:"#fed7aa",background:"#fff7ed"}}><small>Participaciones repetidas</small><h2 style={{marginBottom:0,color:"#c2410c"}}>{participacionesRepetidas.toLocaleString("es-CO")}</h2></div><div style={{...E.block,borderColor:"#ddd6fe",background:"#f5f3ff"}}><small>Personas que asistieron más de una vez</small><h2 style={{marginBottom:0,color:"#6d28d9"}}>{personasQueRepitieron.toLocaleString("es-CO")}</h2></div><div style={{...E.block}}><small>Registros nominales analizados</small><h2 style={{marginBottom:0}}>{identityKeys.length.toLocaleString("es-CO")}</h2></div></div></>:<div style={{...E.block,...E.orange}}>Café a tu Barrio guarda totales de convocados y asistentes, pero no una lista con documentos. Para discriminar personas nuevas y repetidas en esta estrategia se debe agregar un Excel nominal de participantes.</div>}
   </section>
 
+  <CrossStrategyBeneficiaries attendance={attendance} people={people} meetings={rm} courseRecords={rk} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} year={year} downloadCsv={downloadCsv}/>
   {best&&totalA>0&&<div style={{...E.block,...E.green,marginBottom:20}}><b>Mayor rendimiento en la vista:</b> {best.name}, con {pct(best.people,best.target)}%.</div>}
   {dashboardFilter==="general"?<div style={E.grid}>
    <PieChart title="Actividades" label="actividades" data={visibleRows.map(x=>({name:x.name,value:x.activities,color:x.color}))}/>
@@ -301,6 +302,31 @@ function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,d
   </div>}
   <section style={{...E.card,marginTop:20}}><h2>Detalle comparativo</h2><Table headers={["Estrategia","Actividades","Convocados o inscritos","Asistentes o beneficiarios","Rendimiento","Peso"]} rows={visibleRows.map(x=>[x.name,x.activities,x.target,x.people,pct(x.people,x.target)+"%",pct(x.people,totalP)+"%"] )}/></section>
  </main>
+}
+function normalizeIdentity(value){return norm(value).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+function CrossStrategyBeneficiaries({attendance,people,meetings,courseRecords,dynamicRecords,strategyConfigs,year,downloadCsv}){
+ const personMap=new Map((people||[]).map(p=>[String(p.id),p]));
+ const meetingIds=new Set((meetings||[]).map(m=>String(m.id)));
+ const configMap=new Map((strategyConfigs||[]).map(c=>[String(c.id),c]));
+ const entries=[];
+ function add({documento,nombre,telefono,estrategia,actividad}){
+  const doc=normalizeIdentity(documento),phone=normalizeIdentity(telefono),name=normalizeIdentity(nombre);
+  if(!doc&&!phone&&!name)return;
+  const key=doc?`doc:${doc}`:phone?`tel:${phone}`:`nom:${name}`;
+  entries.push({key,documento:norm(documento),nombre:norm(nombre),telefono:norm(telefono),estrategia,actividad,confidence:doc?"Alta":phone?"Media":"Posible"});
+ }
+ (attendance||[]).filter(a=>meetingIds.has(String(a.reunion_id))).forEach(a=>{const p=personMap.get(String(a.persona_id))||{},m=(meetings||[]).find(x=>String(x.id)===String(a.reunion_id));add({documento:p.numero_documento,nombre:p.nombre_completo,telefono:p.telefono,estrategia:"Reuniones",actividad:m?.tema||"Reunión"})});
+ (courseRecords||[]).forEach(course=>(course.lista||[]).forEach(p=>add({documento:p.documento,nombre:p.nombre,telefono:p.telefono,estrategia:"Cursos",actividad:course.nombre||"Curso"})));
+ (dynamicRecords||[]).filter(r=>String(r.datos?.fecha||r.created_at||"").slice(0,4)===String(year)).forEach(r=>{const d=r.datos||{},c=configMap.get(String(r.estrategia_id));const documento=d.numero_documento||d.documento||d.cedula||d.identificacion;const nombre=d.beneficiario||d.nombre_completo||d.nombre||d.aliado_beneficiado;const telefono=d.telefono||d.celular||d.telefono_beneficiario;add({documento,nombre,telefono,estrategia:c?.nombre||r.codigo_estrategia||"Otra estrategia",actividad:d.nombre_actividad||d.actividad||d.curso||d.programa||nombre||"Registro"})});
+ const grouped={};entries.forEach(entry=>{if(!grouped[entry.key])grouped[entry.key]={...entry,strategies:new Set(),activities:new Set(),appearances:0};grouped[entry.key].strategies.add(entry.estrategia);grouped[entry.key].activities.add(`${entry.estrategia}: ${entry.actividad}`);grouped[entry.key].appearances++});
+ const matches=Object.values(grouped).filter(row=>row.strategies.size>1).map(row=>({...row,strategies:[...row.strategies],activities:[...row.activities]})).sort((a,b)=>b.strategies.length-a.strategies.length||b.appearances-a.appearances);
+ const pairs={};matches.forEach(row=>{for(let i=0;i<row.strategies.length;i++)for(let j=i+1;j<row.strategies.length;j++){const pair=[row.strategies[i],row.strategies[j]].sort().join(" ↔ ");pairs[pair]=(pairs[pair]||0)+1}});
+ const pairRows=Object.entries(pairs).sort((a,b)=>b[1]-a[1]);
+ function exportMatches(){downloadCsv(`beneficiarios_repetidos_entre_estrategias_${year}.csv`,["Documento","Beneficiario","Teléfono","Nivel de coincidencia","Estrategias","Número de estrategias","Apariciones","Actividades"],matches.map(r=>[r.documento,r.nombre,r.telefono,r.confidence,r.strategies.join(" | "),r.strategies.length,r.appearances,r.activities.join(" | ")]))}
+ return <section style={{...E.card,marginBottom:20}}><div style={{...E.row,justifyContent:"space-between"}}><div><h2 style={{marginBottom:4}}>Beneficiarios repetidos entre estrategias</h2><p style={{marginTop:0,color:"#64748b"}}>Cruce automático por documento, teléfono o nombre normalizado para el año {year}.</p></div><button style={{...E.btn,...E.blue}} onClick={exportMatches} disabled={!matches.length}>Descargar cruce</button></div>
+ <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:14,marginBottom:18}}><div style={{...E.block,borderColor:"#ddd6fe",background:"#f5f3ff"}}><small>Beneficiarios en varias estrategias</small><h2 style={{color:"#6d28d9"}}>{matches.length}</h2></div><div style={E.block}><small>Pares de estrategias con coincidencias</small><h2>{pairRows.length}</h2></div><div style={E.block}><small>Coincidencias de alta confianza</small><h2>{matches.filter(r=>r.confidence==="Alta").length}</h2></div><div style={{...E.block,...E.orange}}><small>Coincidencias posibles solo por nombre</small><h2>{matches.filter(r=>r.confidence==="Posible").length}</h2></div></div>
+ {pairRows.length>0&&<><h3>Estrategias que más comparten beneficiarios</h3><Table headers={["Cruce de estrategias","Beneficiarios compartidos"]} rows={pairRows}/><br/></>}
+ <h3>Detalle de beneficiarios compartidos</h3><Table headers={["Documento","Beneficiario","Teléfono","Confianza","Estrategias","Apariciones"]} rows={matches.map(r=>[r.documento||"-",r.nombre||"-",r.telefono||"-",r.confidence,r.strategies.join(" · "),r.appearances])}/>{!matches.length&&<p style={{...E.block,marginTop:14}}>No se encontraron beneficiarios identificables en dos o más estrategias durante {year}.</p>}<p style={{fontSize:13,color:"#64748b",marginBottom:0}}><b>Criterio:</b> documento = coincidencia alta; teléfono = media; solo nombre = posible. Café a tu Barrio solo puede participar en el cruce cuando tenga una lista nominal con documento, teléfono o nombre.</p></section>
 }
 function MapClickHandler({onChange}){
  useMapEvents({click(event){onChange(event.latlng.lat.toFixed(6),event.latlng.lng.toFixed(6))}});
