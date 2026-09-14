@@ -6,7 +6,8 @@ import "leaflet/dist/leaflet.css";
 
 const ZONAS=["Metropolitana","Suroccidente","Suroriente","Norte Centro Histórico","Riomar"];
 const ADMIN_EMAIL="stephaniebecomas@gmail.com";
-const CONSULTA_EMAILS=["stephaniebeco@gmail.com","palmasanjuanelov@gmail.com"];
+const CONSULTA_EMAILS=["stephaniebeco@gmail.com"];
+const OPERADOR_EMAILS=["palmasanjuanelov@gmail.com"];
 const RESPONSIVE_CSS=`
 *{box-sizing:border-box}
 html,body,#root{margin:0;min-width:0;width:100%;overflow-x:hidden}
@@ -72,7 +73,8 @@ export default function App(){
  const currentEmail=norm(session?.user?.email).toLowerCase();
  const isAdmin=currentEmail===ADMIN_EMAIL;
  const isConsulta=CONSULTA_EMAILS.includes(currentEmail);
- const canWrite=!isConsulta;
+ const isOperador=OPERADOR_EMAILS.includes(currentEmail);
+ const canWrite=isAdmin||isOperador;
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)});const {data}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>data.subscription.unsubscribe()},[]);
  useEffect(()=>{if(session)load();else{setLeaders([]);setMeetings([]);setAttendance([]);setPeople([])}},[session]);
  async function load(){
@@ -138,7 +140,7 @@ export default function App(){
  if(!session)return <main style={{...E.page,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><form style={{...E.card,width:"100%",maxWidth:430}} onSubmit={login}><h1>Seguimiento de Estrategias</h1>{msg&&<p style={{...E.block,...notice}}>{msg}</p>}<label>Correo<input required type="email" style={E.input} value={email} onChange={e=>setEmail(e.target.value)}/></label><br/><br/><label>Contraseña<input required type="password" style={E.input} value={password} onChange={e=>setPassword(e.target.value)}/></label><br/><br/><button style={{...E.btn,...E.blue,width:"100%"}}>{saving?"Ingresando...":"Iniciar sesión"}</button></form></main>;
  return <div style={{...E.page,display:"flex",alignItems:"stretch"}}><style>{RESPONSIVE_CSS}</style><button type="button" className="mobile-menu-button" onClick={()=>setSidebarOpen(!sidebarOpen)} aria-label="Abrir o cerrar menú">☰</button><div className={`sidebar-overlay ${sidebarOpen?"open":""}`} onClick={()=>setSidebarOpen(false)}></div>
   <aside className={`app-sidebar ${sidebarOpen?"open":""}`} style={{width:260,minWidth:260,minHeight:"100vh",background:"#0f172a",color:"white",padding:20,boxSizing:"border-box",position:"sticky",top:0,alignSelf:"flex-start"}}>
-   <h2 style={{margin:"0 0 6px"}}>Estrategias</h2><p style={{margin:"0 0 8px",fontSize:13,color:"#cbd5e1"}}>Panel de seguimiento</p>{isAdmin&&<p style={{margin:"0 0 22px",padding:"7px 9px",background:"#14532d",borderRadius:8,fontSize:12}}>Administrador</p>}{isConsulta&&<p style={{margin:"0 0 22px",padding:"7px 9px",background:"#334155",borderRadius:8,fontSize:12}}>Solo consulta</p>}
+   <h2 style={{margin:"0 0 6px"}}>Estrategias</h2><p style={{margin:"0 0 8px",fontSize:13,color:"#cbd5e1"}}>Panel de seguimiento</p>{isAdmin&&<p style={{margin:"0 0 22px",padding:"7px 9px",background:"#14532d",borderRadius:8,fontSize:12}}>Administrador</p>}{isOperador&&<p style={{margin:"0 0 22px",padding:"7px 9px",background:"#1d4ed8",borderRadius:8,fontSize:12}}>Operador</p>}{isConsulta&&<p style={{margin:"0 0 22px",padding:"7px 9px",background:"#334155",borderRadius:8,fontSize:12}}>Solo consulta</p>}
    <p style={{margin:"20px 0 9px",fontSize:12,fontWeight:800,letterSpacing:1,color:"#94a3b8",textTransform:"uppercase"}}>Generalidades</p>
    {[["dashboard","Dashboard"],["finanzas","Gestión Financiera"],["mapa","Mapa territorial"],["lideres","Líderes"],["repitencia","Repitencia de beneficiarios"]].map(([id,label])=><button key={id} onClick={()=>{setStrategy(id);setSidebarOpen(false)}} style={{...E.btn,width:"100%",marginBottom:10,textAlign:"left",background:strategy===id?"#2563eb":"#1e293b",color:"white"}}>{label}</button>)}
    <p style={{margin:"20px 0 9px",fontSize:12,fontWeight:800,letterSpacing:1,color:"#94a3b8",textTransform:"uppercase"}}>Estrategias</p>
