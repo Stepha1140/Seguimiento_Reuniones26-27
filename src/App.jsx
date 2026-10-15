@@ -248,6 +248,23 @@ function DateBarChart({title,data,field,color,suffix=""}){
   </div>:<p style={E.block}>No hay registros para esta estrategia en el período seleccionado.</p>}
  </section>
 }
+
+function TemporalDashboard({meetings,cafeRecords,courseRecords,dynamicRecords,strategyConfigs,year}){
+ const [period,setPeriod]=useState("mes"),[costs,setCosts]=useState([]);
+ useEffect(()=>{supabase.from("gastos_actividades").select("fecha,valor,estrategia_codigo").then(({data})=>setCosts(data||[]))},[]);
+ const entries=[
+  ...(meetings||[]).map(x=>({date:x.fecha,activities:1,people:+x.personas_asistentes||0,strategy:"reuniones"})),
+  ...(cafeRecords||[]).map(x=>({date:x.fecha,activities:1,people:+x.asistentes||0,strategy:"cafe"})),
+  ...(courseRecords||[]).map(x=>({date:x.fecha,activities:1,people:+x.asistentes||+x.participantes||0,strategy:"cursos"})),
+  ...(dynamicRecords||[]).map(x=>{const config=(strategyConfigs||[]).find(c=>String(c.id)===String(x.estrategia_id));const d=x.datos||{};return{date:d.fecha||x.created_at,activities:1,people:+(d.asistentes??d.beneficiarios??d.numero_beneficiarios??d.participantes??d.cantidad??0)||0,strategy:config?.codigo||"otra"}})
+ ].filter(x=>String(x.date||"").slice(0,4)===String(year));
+ const monthNames=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+ function bucket(date){const month=Math.max(0,Math.min(11,(new Date(`${String(date).slice(0,10)}T00:00:00`).getMonth())));if(period==="mes")return{key:month,label:monthNames[month]};if(period==="trimestre"){const n=Math.floor(month/3)+1;return{key:n,label:`Trimestre ${n}`}}if(period==="semestre"){const n=month<6?1:2;return{key:n,label:`Semestre ${n}`}}return{key:1,label:`Año ${year}`}}
+ const map=new Map();entries.forEach(x=>{const b=bucket(x.date),r=map.get(b.key)||{label:b.label,activities:0,people:0,cost:0,strategies:new Set()};r.activities+=1;r.people+=x.people;r.strategies.add(x.strategy);map.set(b.key,r)});costs.filter(x=>String(x.fecha||"").slice(0,4)===String(year)).forEach(x=>{const b=bucket(x.fecha),r=map.get(b.key)||{label:b.label,activities:0,people:0,cost:0,strategies:new Set()};r.cost+=+x.valor||0;r.strategies.add(x.estrategia_codigo);map.set(b.key,r)});
+ const rows=[...map.entries()].sort((a,b)=>a[0]-b[0]).map(([,r])=>r),max=Math.max(1,...[...map.values()].map(x=>x.people));
+ return <section style={{...E.card,marginBottom:20}}><div style={{...E.row,justifyContent:"space-between"}}><div><h2 style={{marginBottom:4}}>Comportamiento por períodos</h2><p style={{marginTop:0,color:"#64748b"}}>Consolidado temporal de todas las estrategias en {year}.</p></div><select style={{...E.input,width:210,marginTop:0}} value={period} onChange={e=>setPeriod(e.target.value)}><option value="mes">Por meses</option><option value="trimestre">Por trimestres</option><option value="semestre">Por semestres</option><option value="anio">Resumen anual</option></select></div>{rows.length?<><div style={{display:"grid",gap:10,margin:"18px 0"}}>{rows.map(r=><div key={r.label} style={{display:"grid",gridTemplateColumns:"140px 1fr 90px",gap:12,alignItems:"center"}}><b>{r.label}</b><div style={{height:18,background:"#e2e8f0",borderRadius:999,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,r.people/max*100)}%`,background:"linear-gradient(90deg,#2563eb,#10b981)"}}/></div><span style={{textAlign:"right"}}>{r.people.toLocaleString("es-CO")}</span></div>)}</div><Table headers={["Período","Actividades","Asistencias o beneficiarios","Estrategias activas","Costo registrado","Costo promedio por participación"]} rows={rows.map(r=>[r.label,r.activities,r.people,r.strategies.size,cop(r.cost),cop(r.people?r.cost/r.people:0)])}/></>:<p style={E.block}>Aún no hay información registrada para {year}.</p>}</section>
+}
+
 function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,dynamicRecords,strategyConfigs,leaders,year,setYear,downloadCsv}){
  const META_PERSONAS=20000;
  const [dashboardFilter,setDashboardFilter]=useState("general");
@@ -343,6 +360,8 @@ function DashboardModule({meetings,attendance,people,cafeRecords,courseRecords,d
    <div style={{display:"flex",justifyContent:"space-between",gap:18,flexWrap:"wrap"}}><div><small style={{color:"#1d4ed8",fontWeight:700}}>META GENERAL DE PERSONAS</small><h2 style={{fontSize:34,margin:"8px 0 4px"}}>{generalPeople.toLocaleString("es-CO")} de {META_PERSONAS.toLocaleString("es-CO")}</h2><span style={{color:"#64748b"}}>La medición usa el acumulado de {zoneDashboardFilter==="Todas"?"todas las zonas":zoneDashboardFilter} en {year}.</span></div><div style={{textAlign:"right"}}><strong style={{display:"block",fontSize:32,color:"#2563eb"}}>{avanceTexto}%</strong><span style={{color:"#64748b"}}>Faltan {faltantesMeta.toLocaleString("es-CO")}</span></div></div>
    <div style={{height:18,background:"#dbeafe",borderRadius:999,overflow:"hidden",marginTop:20}}><div style={{height:"100%",width:`${avanceMeta}%`,background:"linear-gradient(90deg,#2563eb,#10b981)",borderRadius:999}}></div></div>
   </section>
+
+  <TemporalDashboard meetings={meetings} cafeRecords={cafeRecords} courseRecords={courseRecords} dynamicRecords={dynamicRecords} strategyConfigs={strategyConfigs} year={year}/>
 
   <div style={{...E.block,marginBottom:20,background:"#eef2ff",borderColor:"#c7d2fe"}}><b>Vista activa:</b> {dashboardFilter==="general"?"Todas las estrategias":visibleRows[0]?.name||allRows.find(x=>x.key===dashboardFilter)?.name} · <b>Zona:</b> {zoneDashboardFilter} · <b>Año:</b> {year}</div>
 
