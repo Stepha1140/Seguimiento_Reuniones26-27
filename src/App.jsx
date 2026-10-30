@@ -11,7 +11,7 @@ const ESTRATEGIAS_RETIRADAS=new Set(["juventud","adulto_mayor","adulto-mayor","a
 const esEstrategiaRetirada=item=>{const codigo=normalizedKey(item?.codigo||"");const nombre=normalizedKey(item?.nombre||"");return ESTRATEGIAS_RETIRADAS.has(codigo)||["juventud","adulto_mayor"].includes(nombre)};
 const ADMIN_EMAIL="stephaniebecomas@gmail.com";
 const CONSULTA_EMAILS=["stephaniebeco@gmail.com"];
-const OPERADOR_EMAILS=["palmasanjuanelov@gmail.com","stephaniebeco@gmail.com"];
+const OPERADOR_EMAILS=["palmasanjuanelov@gmail.com","stephaniebeco@gmail.com","hidalgovesgaandres02@gmail.com"];
 const RESPONSIVE_CSS=`
 *{box-sizing:border-box}
 html,body,#root{margin:0;min-width:0;width:100%;overflow-x:hidden}
